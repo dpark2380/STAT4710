@@ -1,0 +1,457 @@
+---
+title: 'Midterm: COVID-19 Case Study, solution'
+author: "Linda Zhao"
+date: "March 27, 2023"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float:
+      collapsed: no
+    number_sections: no
+urlcolor: blue
+---
+
+```{r Setup, include=FALSE, results='hide', warning=FALSE}
+knitr::opts_chunk$set(echo = T, fig.width=8, fig.height=4)
+options(scipen = 999, digits = 3)  # controls base R output
+
+# Package setup
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, glmnet, car)
+```
+
+# Instruction
+
+**All the teaching team members will be available from 7:00 - 9:10 PM.  The submission will be closed sharp at 9:10PM.** 
+
+
+**Instruction:** This midterm requires you to use R. It is completely open book/notes/internet. However any versions of ChatGPT or alike are strictly prohibitive. Write your answers using .rmd format and knitr it into one of the html/pdf/docx format. Show your codes, plots or R-output when needed. You can use `echo = TRUE` to show your codes which is the default setup for this file. If you have trouble formatting the plots, don't worry about it. We are not looking for pretty solutions, rather to see if you are able to make sense out of the data using R. Make sure the compiled html (and/or pdf) file shows your answers completely and that they are not cut-off. Throughout the exam, you do not need to use any LaTeX or mathematical equations. **Whenever we ask for test at some significant level, assume all the model assumptions are satisfied.**
+
+**All the answers should be clearly supported by relevant R code or based on the R output**. 
+
+There are 4 questions with various parts:
+
+- **Question 1: 3 parts**
+- **Question 2: 3 parts**
+- **Question 3: 2 parts**
+- **Question 4: 4 parts**
+
+**DO NOT spend too much time on a single question. Come back to where you stuck after you have tried all the questions.**
+
+**Data needed for the Midterm:** 
+- Canvas &rarr; Files &rarr; Exams &rarr; Midterm &rarr; Midterm Spring 2023 &rarr; midterm.csv.
+- Place the dataset `midterm.csv` into the same directory of the this Rmarkdown file.
+
+**Electronic Submission:** Two files needed: your `.rmd` file and a compiled html file. 
+
+**Label them with your full name.** In the `Assignments` section, go to the `Midterm` assignment and upload your completed files. If you have trouble submitting the files to Canvas, email them to lzhao@wharton.upenn.edu and dongwooo@wharton.upenn.edu 
+
+**The submission folder will be closed sharp at 9:10PM**. 
+
+**On-site Help:** We will answer any clarification questions. We may also help out with some minor code issues. We will not, however, provide any answers as to what functions to use for example. 
+
+**Raise your hand** if you want to talk to one of us.
+   
+In case of emergency, here is Linda's cell: 6106590187 (text or call her)
+
+
+# Background
+
+The outbreak of the novel Corona virus disease 2019 (COVID-19) [was declared a public health emergency of international concern by the World Health Organization (WHO) on January 30, 2020](https://www.who.int/dg/speeches/detail/who-director-general-s-statement-on-ihr-emergency-committee-on-novel-coronavirus-(2019-ncov)). Upwards of [112 million cases have been confirmed worldwide, with nearly 2.5 million associated deaths](https://covid19.who.int/). Within the US alone, there have been [over 500,000 deaths and upwards of 28 million cases reported](https://covid.cdc.gov/covid-data-tracker/#trends_dailytrendscases). Governments around the world have implemented and suggested a number of policies to lessen the spread of the pandemic, including mask-wearing requirements, travel restrictions, business and school closures, and even stay-at-home orders. The global pandemic has impacted the lives of individuals in countless ways, and though many countries have begun vaccinating individuals, the long-term impact of the virus remains unclear.
+
+The impact of COVID-19 on a given segment of the population appears to vary drastically based on the socioeconomic characteristics of the segment. In particular, differing rates of infection and fatalities have been reported among different [racial groups](https://www.cdc.gov/coronavirus/2019-ncov/covid-data/investigations-discovery/hospitalization-death-by-race-ethnicity.html), [age groups](https://www.cdc.gov/coronavirus/2019-ncov/covid-data/investigations-discovery/hospitalization-death-by-age.html), and [socioeconomic groups](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7221360/). One of the most important metrics for determining the impact of the pandemic is the death rate, which is the proportion of people within the total population that die due to the the disease. 
+
+
+**There are two main goals for this case study.** 
+
+1. Number of deaths vary drastically across US regions. US regions can help to describe a larger area and also helps to group together states that are similar in features such as geography, culture, history, and climate. We want to find out how regions relate to the fatality rate.
+
+2. There have been studies on COVID income disparities. Is there evidence in our data to show that the level of household income relates to the death at county level?
+
+To make our case study here simple and manageable in a timely fashion, we have assembled a subset of data called: `midterm.csv`. It includes county level total number of deaths by a chosen date, together with selected demographic information. `State` names and `Region` are also included in the data. The name of each variable should be self-explanatory. 
+
+
+
+
+# Data preparation
+
+In this case study, we have created `midterm.csv` based on the following **THREE** cleaned datasets:
+
+- **covid_county.csv**: County-level socioeconomic information that combines the above-mentioned 4 datasets: Income (Poverty level and household income), Jobs (Employment type, rate, and change), People (Population size, density, education level, race, age, household size, and migration rates), County Classifications
+- **covid_rates.csv**: Daily cumulative numbers on infection and fatality for each county
+- **state_region.csv**: Grouping states into distinct regions in the United States
+
+**Among all data, the unique identifier of county is `FIPS`.**
+
+What is a good way to measure COVID death rate? There are quite a number of counties with a very low or zero number of deaths. We have proposed an effective way of handling such an imbalanced situation. In the following chunk, we created a new measurement of fatality rate
+\[ \mathrm{fatality\_rate} = \frac{\mathrm{cum\_deaths} + 1}{\mathrm{cum\_cases} + 2} \] 
+and then applied the log function to get the variable labeled as `log_fatality_rate`. 
+
+Not only that, we will focus on the median household income `MedHHInc_10k` whose unit of measurement is $10,000. This is exactly equal to `MedHHInc` divided by 10,000.
+
+We then created the data `midterm.csv` by combining the `log_fatality_rate` with a subset of county level demographic information. The process of creating this data is shown in the following R-chunk, labeled as `data prep`. Read through the `data prep` chunk carefully for future analysis.
+
+```{r, data prep, eval = FALSE, echo = TRUE}
+# This is how we created the midterm.csv
+# DONOT RUN this chunk
+
+# county-level socialeconomic information
+covid_county <- read_csv("covid_county.csv")
+# county-level COVID case and death
+covid_rates <- read_csv("covid_rates.csv")
+# region dataset
+state_region <- read_csv("state_region.csv")   
+
+dat <- covid_rates %>%
+  #filter(date == "2020-09-01") %>%
+  filter(date == "2020-12-31") %>%
+  mutate(log_fatality_rate = log((cum_deaths + 1) / (cum_cases + 2))) %>%
+  select(FIPS, log_fatality_rate)
+
+# join with county-level demographic data
+dat <- left_join(dat, covid_county, by = "FIPS") %>%
+    left_join(state_region, by = "State") %>%
+    mutate(MedHHInc_10k = MedHHInc / 10000) %>%
+    drop_na()
+
+# take a subset of the demographic info
+dat <- dat %>%
+    select(log_fatality_rate, MedHHInc_10k, Region, State, County, UnempRate2019, PctEmpFIRE, PctEmpConstruction, PctEmpTrans, PctEmpMining, PctEmpTrade, PctEmpInformation, PctEmpAgriculture, PctEmpManufacturing, PctEmpServices, PopDensity2010, OwnHomePct, Age65AndOlderPct2010, TotalPop25Plus, Under18Pct2010, Ed2HSDiplomaOnlyPct, Ed3SomeCollegePct, Ed4AssocDegreePct, Ed5CollegePlusPct, ForeignBornPct, Net_International_Migration_Rate_2010_2019, NetMigrationRate1019, NaturalChangeRate1019, TotalPopEst2019, WhiteNonHispanicPct2010, Type_2015_Update, RuralUrbanContinuumCode2013, UrbanInfluenceCode2013, Perpov_1980_0711, HiCreativeClass2000, HiAmenity, Retirement_Destination_2015_Update)
+
+# output
+write_csv(dat, "midterm.csv")
+```
+
+
+
+We next read the pre-processed data `midterm.csv` into R and label it as `dat`. 
+
+**`midterm.csv` must be stored in the same directory of this Rmd file.** 
+
+**`dat` will be used throughout the midterm.** 
+
+```{r read data, message=FALSE, warning=FALSE}
+dat <- read.csv("midterm.csv") 
+#summary(dat)
+
+```
+
+
+
+# Question 1. EDA
+
+We first study the log fatality rates at region and household-income level via the following EDA.
+
+## Question 1-1.
+
+Report the following summary statistics:
+
+a. How many Regions are there? 
+
+a. How many Counties are there in each Region?
+
+
+**Answer**:
+```{r}
+dat %>%
+  group_by(Region) %>%
+  summarise(num_County = n())
+```
+
+
+This is a reference. Didn't do it. 
+```{r county by region and state}
+dat %>%    # this is only for me to check something
+  group_by(Region, State) %>% 
+  summarise(num_State = n_distinct(County))  
+```
+
+
+
+
+
+## Question 1-2
+
+a. Display back to back boxplots of `log_fatality_rate` with respect to Regions.
+
+a. Using no more than two sentences, comment on the variations of `log_fatality_rate` among different Regions.
+
+**Answer**:
+```{r}
+dat %>%
+  ggplot(aes(x = Region, y = log_fatality_rate, fill = Region)) +
+  geom_boxplot() +
+  xlab("Region") +
+  ylab("log death rate") +
+  ggtitle("log death rate by Region") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+**The death rates are higher in NE while similar in other regions.**
+
+
+
+
+
+## Question 1-3.
+
+We would like to explore how `MedHHInc_10k` and `Region` relate to `log_fatality_rate`. 
+
+a. Draw scatter plots of `log_fatality_rate` versus `MedHHInc_10k` with a line of simple linear regression fit with respect to `Region`. 
+    - Option 1: You can make a single plot with five lines.
+    - Option 2: Produce five plots and place them side-by-side. (Hint: `facet_wrap` function would be helpful to automatically draw many plots side-by-side. Consult with our first Module.) 
+    - Option 3: If you have trouble to produce either one of the above just provide plots one by one or only provide plots for `Northeast` and `Southeast` region. 
+    
+a. Do you see possible interaction effects of `MedHHInc_10k` and `Region` over `log_fatality_rate`? How so? Use no more than two sentences to explain.
+
+**Answer**: Yes, since the slope for `Northeast` is positive while all others are negative. 
+```{r Option 1}
+dat %>%
+  ggplot(aes(x=MedHHInc_10k, y=log_fatality_rate, group = Region, color=Region)) +
+  geom_point()+
+  geom_smooth(method="lm", formula=y~x, se=F)+
+  theme_bw() 
+```
+
+```{r Option 2}
+dat %>%
+  ggplot(aes(x=MedHHInc_10k, y=log_fatality_rate, group = Region, color=Region)) +
+  geom_point()+
+  geom_smooth(method="lm", formula=y~x, se=F)+
+  facet_wrap(~Region) + 
+  theme_bw() 
+```
+
+**Answer: Since the slopes are very different among five regioins, it indicates some interaction effects.**
+
+
+
+
+# Question 2. Simple analysis
+
+There are a number of studies indicating that COVID is affected by income level. In the following analyses, we focus on the effect of `MedHHInc_10k` and `Region` over `log_fatality_rate`. 
+
+## Question 2-1.
+
+Run a regression of `log_fatality_rate` vs. `MedHHInc_10k` controlling `Region` (without interactions) as `fit1`. Report the summary of `fit1`. Also provide the appropriate p-values either from `fit1` or other appropriate tests to answer the following questions. 
+
+a. Can you reject the null hypothesis that `MedHHInc_10k` is not needed after controlling `Region` at $\alpha = .01$? 
+a. Do we have evidence to support the hypothesis that after controlling for `MedHHInc_10k`, the `log_fatality_rate` are different on average among different regions? 
+a. Controlling for `MedHHInc_10k`, which Region has highest `log_fatality_rate` on average? 
+
+**Answer**: Yes, we can reject the null according to the Z or F-statistic as follow. Controlling `MedHHInc_10k`, northeast region has the highest `log_fatality_rate` on average.
+```{r}
+fit1 <- lm(log_fatality_rate ~ MedHHInc_10k + Region, data = dat)
+summary(fit1)
+Anova(fit1)  
+```
+
+**Answers: from the above output, we know:**
+
+a. We reject the null hypothesis that `MedHHInc_10k` is not needed after controlling `Region` at $\alpha = .01$? Since the p-value = 0.00000000000000022 which is much smaller that .01
+
+a. We have strong evidence to support the hypothesis that after controlling for `MedHHInc_10k`, the `log_fatality_rate` are different on average among different regions. Since the p-value is  0.0000000000000002
+
+a. Controlling for `MedHHInc_10k`, RegionNortheast=  0.7308  has the highest `log_fatality_rate` on average. 
+
+
+
+
+## Question 2-2. 
+
+Are the linear model assumptions reasonably met in `fit1`? Provide residual and normal plots for `fit1`. Use no more than three sentences to summarize your model diagnoses.
+
+**Answer**:
+```{r}
+plot(fit1, 1:2)
+```
+
+**Answer:**
+
+a. The linearity assumtion is fine since the residual plot show reasonable symmetry w.r.t the horizontal line at 0.
+
+a. The qq-plot indicates the normality assumtion is fine. 
+
+
+
+## Question 2-3. Prediction interval
+
+Assume all the linear model assumptions are met in fit1. We would like to predict the fatality_rate for Philadelphia by providing a 95% prediction interval:
+
+a. First provide a 95% prediction interval for `log_fatality_rate` here.
+
+a. Then unlog (base $e$) the above 95\% prediction interval to obtain 95% prediction interval of fatality rate of Philadelphia.
+
+Hint: First extract information of Philadelphia then do prediction interval.
+```{r}
+philly <- filter(dat, County == "Philadelphia")  # to extract information for philly
+```
+
+**Answer**:
+```{r}
+philly <- filter(dat, County == "Philadelphia")  # to extract information for philly
+fit <- predict(fit1, philly, interval = "predict",
+        se.fit = TRUE, level = 0.95)$fit
+fit
+fit.conf <- exp(fit)
+fit.conf
+```
+
+
+
+# Question 3. Interaction analysis
+
+We would look into interactions between household income and region on `log_fatality_rate`.
+
+## Question 3-1.
+
+Run a regression of `log_fatality_rate` vs. `MedHHInc_10k`, `Region` and interaction between `MedHHInc_10k` and `Region`. Save the result as `fit2`. Do we have evidence to support that there is an interaction effect of `MedHHInc_10k` and `Region` over `log_fatality_rate`? Perform a test at $\alpha = .01$.
+
+**Answer**: 
+```{r}
+fit2 <- lm(log_fatality_rate ~ MedHHInc_10k + Region + Region * MedHHInc_10k, data = dat)
+summary(fit2)
+Anova(fit2)  #solution 1 or
+anova(fit1, fit2) # solution 2
+```
+
+
+
+
+
+## Question 3-2
+
+Based on `fit2`, report the slopes of `MedHHInc_10k` for Region `Northeast` and `West`.
+
+**Answer**:
+```{r}
+fit2$coef[7] + fit2$coef[2] # Northeast
+fit2$coef[10] + fit2$coef[2] # West
+```
+
+
+
+# Question 4. Final analysis
+
+## Question 4-1.
+
+Use LASSO to pick up a few variables in addition to `MedHHInc_10k` and `Region` excluding `State` and `County`. 
+
+a. `fit_lasso_cv`:  Run LASSO with the following settings to get the same results. 
+    * Use `set.seed(12345)` to control the cross-validation
+    * Use 20-fold cross validations
+    * Force `MedHHInc_10k` and `Region` in all the LASSO models 
+    * Pick up the variables using  `lambda.1se` 
+a. plot `fit_lasso_cv`
+a. Save as `lasso_selected` the variable names selected by the LASSO, and print it. This vector must contain `Region` instead of each category such as `RegionWest` or `RegionSoutheast` or `RegionSouthwest`.
+
+Hint: 
+```{r LSSSO}
+Y <- as.matrix(dat[, 'log_fatality_rate']) # extract Y
+X <- model.matrix(log_fatality_rate ~ . - State - County, data = dat)[, -1]
+force_in_indicator <- c(rep(0, 5), rep(1, ncol(X)-5))
+```
+
+**Answer**: 
+```{r}
+Y <- as.matrix(dat[, 'log_fatality_rate']) # extract Y
+X <- model.matrix(log_fatality_rate ~ . - State - County, data = dat)[, -1]
+force_in_indicator <- c(rep(0, 5), rep(1, ncol(X)-5))
+#names(dat)
+set.seed(12345)
+fit_lasso_cv <- cv.glmnet(X, Y, alpha = 1, nfolds = 20, intercept = TRUE,
+                          penalty.factor = force_in_indicator)
+plot(fit_lasso_cv)
+coef_1se <- coef(fit_lasso_cv, s = "lambda.1se")
+coef_1se <- coef_1se[which(coef_1se != 0), ]
+lasso_selected <- c("MedHHInc_10k", "Region", names(coef_1se)[-c(1:6)])
+
+lasso_selected  
+```
+
+
+
+
+
+
+## Question 4-2.
+
+Run a model `fit3` of `log_fatality_rate` vs the set of variables in `lasso_selected` given in the following code chunk. Assume this is what you have chosen using LASSO. Or those who CAN NOT run LASSO successfully can also use this set of variables to finish the `fit3`.  
+
+```{r}
+# Do not modify this code chunk
+lasso_selected <- c("MedHHInc_10k", "Region", "UnempRate2019", "PctEmpTrans", "PctEmpMining", "PctEmpTrade", "PctEmpInformation", "PctEmpAgriculture", "PctEmpManufacturing", "PopDensity2010", "OwnHomePct", "Age65AndOlderPct2010", "TotalPop25Plus", "Ed4AssocDegreePct", "ForeignBornPct", "NetMigrationRate1019", "NaturalChangeRate1019", "WhiteNonHispanicPct2010", "Type_2015_Update", "RuralUrbanContinuumCode2013",  "HiAmenity", "Retirement_Destination_2015_Update")
+
+# prepare all the variables needed in fit3
+dat_fit3 <- select(dat, all_of(c("log_fatality_rate", lasso_selected))) 
+```
+
+a. Report summary of `fit3`. (No need to do further model selection!)
+
+Answering the following questions with proper p-values or perform proper tests. 
+
+a. Is `Region` significant at .01 level controlling for all other variables? 
+
+a. Is `MedHHInc_10k` significant at .01 level controlling for all other variables?
+
+**Answer**: Yes.
+```{r}
+#dat_fit3 <- select(dat, all_of(c("log_fatality_rate", lasso_selected)))
+fit3 <- lm(log_fatality_rate ~ ., dat = dat_fit3)
+# dat_fit3_1 <- dat_fit3 %>% select(-Perpov_1980_0711)
+# fit3 <- lm(log_fatality_rate ~ .,  data = dat_fit3_1)
+summary(fit3)
+Anova(fit3)
+```
+
+
+ **Question 4-3.(We took this question out of the exam.)** To choose a more desirable model among `fit1` and `fit3` we recommend using $C_p$ statistics. We can use function `AIC` to report $C_p$ statistics as follows. `fit3` is better with a smaller $C_p$. Use no more than one sentence to support why $C_p$ is a good criterion.
+```{r}
+AIC(fit1)
+AIC(fit3)
+```
+
+**Answer**:
+Cp estimates testing errors.
+
+
+
+
+
+
+## Question 4-3.
+
+Based on `fit3`, summarize your findings focusing on the effects of `MedHHInc_10k` and `Region` over the  `log_fatality_rate`. Does that make sense to you? Use no more than three sentences to describe.
+
+**Answer**:
+
+
+
+
+
+
+
+
+
+**===================== End of the Midterm =====================**
+
+# Appendix {-}
+
+## Data Summary {-}
+
+The data comes from several different sources: 
+
+1. [County-level infection and fatality data](https://github.com/nytimes/covid-19-data) - This dataset gives daily cumulative numbers on infection and fatality for each county. 
+    * [NYC data](https://github.com/nychealth/coronavirus-data)
+2. [County-level socioeconomic data](https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/download-the-data/) - The following are the four relevant datasets from this site.   
+    i. Income - Poverty level and household income. 
+    ii. Jobs - Employment type, rate, and change.
+    iii. People - Population size, density, education level, race, age, household size, and migration rates.
+    iv. County Classifications - Type of county (rural or urban on a rural-urban continuum scale).

@@ -1,0 +1,346 @@
+---
+title: 'Quiz 1 '
+author: "Modern Data Mining"
+date: "Februray 9, 2021"
+output:
+  pdf_document:
+    keep_tex: yes
+  html_document:
+    df_print: paged
+documentclass: exam-mod
+fontfamily: mathpazo
+fontsize: 11pt
+geometry: margin=1in
+header-includes:
+- \linespread{1.05}
+- \usepackage{framed}
+- \usepackage{fancyvrb}
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.height=5, fig.width=8, warning = F)
+options(scipen = 1, digits = 2)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(gridExtra)
+
+```
+
+\makebox[\textwidth]{\textbf{Name}: \enspace\hrulefill}
+\vspace{0.4in}
+\makebox[\textwidth]{\textbf{Section (571, 701)}:\enspace\hrulefill}
+
+
+This is an open book, 10-minute quiz. Choose the correct answer(s). There might be more than one right answer in some questions. No calculations are needed. 
+
+We use Major League Baseball data for most of the questions. The dataset `baseball.csv` contains payroll and winning for 30 Major League team for a span of 1998 to 2014. 
+
+`team`: team name
+
+`year`: 
+
+`payroll`: team payroll in millions
+
+`win_num`: number of wins
+
+`win_pct`: winning percentage
+
+Let us first read the data: 
+
+```{r, read baseball data, results= "hold"}
+baseball <- read.csv("baseball.csv", header = TRUE, stringsAsFactors = F)
+dim(baseball)
+```
+
+**1.** Based on the above r-chunk only, choose the correct answer(s): 
+
+(A) The dataset `baseball.csv` has 510 rows. 
+
+(B) The dataset `baseball.csv` has no missing values
+
+
+
+
+We then aggregate the data which only contains the total payroll and average winning percentage for each team. They are `team`, `payroll_total`, and `win_pct_ave`.  `payroll_total` is in billions. The data is stored as `data_agg`. 
+
+```{r, aggeragate w summarise, results="hold"}
+# create total and average winning percentage for each team
+data_agg <-baseball %>% 
+  group_by(team) %>%
+  summarise(
+    payroll_total = sum(payroll)/1000, 
+    win_pct_ave = mean(win_pct))
+```
+
+Here are some summaries:
+
+```{r summary data_agg}
+mean(data_agg$win_pct_ave)
+sd(data_agg$win_pct_ave)
+```
+
+Based on the information provided above,
+
+**2.** The sample mean of `win_pct_ave` is `r mean(data_agg$win_pct_ave)`. 
+
+(A)  True
+
+(B)  False
+
+
+**3.** The sample mean of `win_pct_ave` should always be `r mean(data_agg$win_pct_ave)` because of the nature of variable: one team loses the opponent wins (assume no ties and each pair of team plays one game against each other). 
+
+(A) True
+
+(B) False
+
+
+
+**4.** Assume that `win_pct_ave` follows a normal distribution. From the data, `Oakland Athletics`'s `win_pct_ave` = `r data_agg$win_pct_ave[data_agg$team == "Oakland Athletics"]`. 
+
+(A) Approximately, 5% of the teams have a higher `win_pct_ave` than that of `Oakland Athletics`.
+
+(B) Approximately, 2.5% of the teams have a higher `win_pct_ave` than that of `Oakland Athletics`.
+
+(C) Approximately, 16% of the teams have a higher `win_pct_ave` than that of `Oakland Athletics`.
+
+(D) Approximately, 16% of the teams have a lower `win_pct_ave` than that of `Oakland Athletics`.
+
+
+
+Question **5** and **6** are based on the following plot:  We use a subset of the Major League Payroll dataset, which only includes average win percentage and average pay for two periods: 1998-2001 (early) and 2011-2014 (late). 
+In the below scatter plot, we plot average win percentage vs average pay for these two periods.
+
+```{r, echo=FALSE}
+two_period <- baseball %>%
+  filter(year >= 2011 | year <= 2001) %>%
+    mutate(period = ifelse(as.numeric(year) > 2005, "2011-2014", "1998-2011")) %>%
+    group_by(team, period) %>%
+    summarise(avg_win = mean(win_pct),
+              avg_pay = mean(payroll))
+
+two_period %>%
+  ggplot(aes(x = avg_pay, y = avg_win, color = period, label = team)) + 
+  geom_point(aes(shape = period), size = 4) + 
+  ggrepel::geom_text_repel(aes(label = ifelse(team %in% c("Boston Red Sox", "New York Yankees"), team, ""))) + 
+  ggtitle("Average winrate vs Average pay", "1998-2001 and 2011-2014, per team") + 
+  xlab("Average pay") + ylab("Average winrate") +
+  theme_bw() +
+  theme(legend.position = "bottom") 
+```
+
+
+**5** Average per-team spending on payroll increased from the early (red round points) to late periods (blue triangle points).
+
+(A) True
+
+(B) False
+
+
+**6** The team that spent the most on players also won the most games, in both periods.
+
+(A) True
+
+(B) False
+
+
+**7**. The following spaghetti plot shows the payroll of each team from 1999 to 2005. The red line is New York Yankees, the green line is Oakland Athletics and the gray lines are the rest of the teams. The black line is the mean payroll of each year.
+
+```{r echo=FALSE}
+selected_teams <- c("New York Yankees",  "Oakland Athletics")
+selected_years <- 1998:2005
+
+baseball %>% 
+  filter(year %in% selected_years) %>%
+  ggplot(aes(x = year, y = payroll, group = team)) + 
+  geom_line(col = "grey") + 
+  geom_point(col = "grey") +
+  geom_line(data = subset(baseball, team %in% selected_teams & year %in% selected_years),
+            aes(col = team)) +
+  geom_point(data = subset(baseball, team %in% selected_teams & year %in% selected_years),
+            aes(col = team)) +
+  geom_line(data = subset(baseball, year %in% selected_years) %>%
+              group_by(year) %>% mutate(payroll = mean(payroll)),
+            col = "black") +
+  geom_point(data = subset(baseball, year %in% selected_years) %>%
+              group_by(year) %>% mutate(payroll = mean(payroll)),
+            col = "black") +
+  scale_color_manual(values = c("red", "darkgreen")) +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  ggtitle("NY Yankees, Oakland A's")
+
+# baseball %>%
+#   filter(team %in% selected_teams & year %in% selected_years) %>%
+#   group_by(team) %>% 
+#   mutate(p = lag(payroll)) %>%
+#   mutate(r = (payroll-p)/p) %>%
+#   mutate(m  = mean(r, na.rm = T))
+```
+
+Choose the correct answer(s): 
+
+(A) New York Yankees is always the highest paid team.
+
+(B) The pay of Oakland Athletics is always below average.
+
+(C) The increase in the payroll of Oakland Athletics over the period of a year is always below the average raise per year
+
+(D) None of the above.
+
+
+**8**. The following shows the boxplot of payroll by year from 1998 to 2014. 
+
+```{r echo=FALSE}
+baseball %>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(x = year, group = year,
+             y = payroll, fill = year)) + 
+  geom_boxplot() +
+  xlab("Year") +
+  ylab("Payroll") +
+  ggtitle("Payroll by year") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+The median payroll has been increasing every year.
+
+(A) True
+
+(B) False
+
+
+**9**. When we perform PCA on SVABS's 10 tests, the leading PC component (or PC1 score)
+
+(A) is a linear combination of 5 tests chosen from SVABS.
+
+(B) is a linear combination of all 10 tests from SVABS.
+
+(C) is the highest score among the 10 tests
+
+
+**10** Recall the PCA plot of scaled and centered Word and Parag from the AFQT tests from the lecture. The line with (.71, .71) is the PC1 direction. Note `p1` is the point with (1.67, 0.69) on the graph.
+
+```{r perpendicular coordinate, echo = F}
+perp.coord <- function(x0, y0, intercept, slope) {
+  # finds endpoint for a perpendicular segment from the point (x0,y0) to the line
+  # remember the product of the slopes of perpendicular line is 1
+  x1 <- (x0 + slope*y0 - intercept*slope)/(1 + slope^2)
+  y1 <- intercept + slope*x1
+  list(x0=x0, y0=y0, x1=x1, y1=y1)
+}
+```
+
+```{r echo = F}
+data.full <- read.csv("IQ.Full.csv")  
+set.seed(10) # make sure the same subset is generated each time   
+AFQT.sub <- data.full[sample(nrow(data.full), 50, replace=FALSE), c("Subject","Word","Parag", "Math", "Arith", "AFQT", "Gender")] 
+rownames(AFQT.sub) <-  paste("p", seq(1:nrow(AFQT.sub)), sep="")  
+
+parag.word.scaled.centered  <- as.data.frame(scale(AFQT.sub[, c("Parag", "Word")], 
+                                           center = T, scale = T))
+# PCA
+pc.parag.word <- prcomp(parag.word.scaled.centered)
+# get the slope
+slope <- pc.parag.word$rotation[2,1] / pc.parag.word$rotation[1,1]
+
+# get the loadings
+loadings <- data.frame(x = abs(pc.parag.word$rotation[1,1]),
+                       y = abs(pc.parag.word$rotation[2,1]))
+
+# get the perpendicular coordinate on the line
+perp.segment <- perp.coord(parag.word.scaled.centered$Parag,
+                           parag.word.scaled.centered$Word, 
+                           intercept = 0, slope)
+perp.segment <- as.data.frame(perp.segment)
+perp.segment <- perp.segment %>%
+  mutate(id = paste0("p", 1:nrow(parag.word.scaled.centered)),
+         pc.score = x0 * loadings$x + y0 * loadings$y)
+
+# get a point
+perp.segment.point <- perp.segment %>% filter(id == "p11")
+
+# 
+ggplot(data = parag.word.scaled.centered, 
+            aes(x = Parag, y = Word)) + 
+  geom_point(alpha = .3) +
+  geom_abline(intercept = 0,
+              slope = slope,
+              size = 1) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  geom_segment(data = perp.segment.point,
+               aes(x = 0, y = 0, xend = x1, yend = y1), 
+               colour = "red", size = 2) +
+  geom_segment(data = perp.segment, 
+               aes(x = x0, y = y0, xend = x1, yend = y1), 
+               colour = "grey") +
+  geom_segment(data = perp.segment.point,
+               aes(x = 0, y = 0, xend = x0, yend = y0), 
+               colour = "darkgreen", linetype = "dashed") +
+  geom_segment(data = perp.segment.point, 
+               aes(x = x0, y = y0, xend = x1, yend = y1, label = pc.score), 
+               colour = "blue", size = 2) +
+  geom_point(data = perp.segment.point, 
+             aes(x = x0, y = y0), 
+             colour = "black", size = 5) +
+  geom_point(data = perp.segment.point, 
+             aes(x = x1, y = y1, label = pc.score), 
+             colour = "red", size = 5, shape = 3) +
+  geom_segment(data = loadings,
+               aes(x = 0, y = 0, 
+                   xend = x, 
+                   yend = y), 
+               colour = "red", 
+               arrow = arrow()) +
+  geom_text(data = perp.segment.point,
+            aes(x = x0 + 1, y = y0, label = paste("p1: (", round(x0,2), ",", round(y0,2), ")"))) +
+  geom_text(data = perp.segment.point,
+            aes(x = x1 + 1, y = y1, 
+                label = paste("PC score:", round(pc.score, 2))),
+            col = "red") +
+  geom_text(data = loadings,
+            aes(x = x,
+                y = y+1, 
+                label = paste0("Loadings:\n", "(", round(x,2), ", ",round(y,2),")")),
+            col = "red") +
+  theme_bw() +
+  coord_fixed(ratio = 1, xlim = c(-1, 3), ylim = c(-1, 2)) +
+  ggtitle("Principle Component 1 of Parag vs Word (centered, scaled)")
+```
+Choose the correct answer(s): 
+
+(A) p1 has the largest PC score on PC1.
+
+(B) Loadings of PC1 is $(0.71, 0.71)$ 
+
+(C) $(-0.71, -0.71)$ is also loadings for PC1
+
+
+
+
+
+<!-- **9** -->
+<!-- Now we do PCA on 10 tests of SVABS. If we apply PCA on all the PCs without scaling, what will happen?  -->
+
+<!-- ```{r} -->
+<!-- pca.all <- prcomp(data.full[,  c(11:20)], scale=TRUE) -->
+<!-- pca.all.x <- pca.all$x -->
+<!-- # prcomp(pca.all.x, scale=F) -->
+<!-- ``` -->
+
+<!-- Choose the correct answer(s):  -->
+
+<!-- (A) Variance of the new PC1 is even larger than the original PC1. -->
+
+<!-- (B) PC scores of each person remain the same. -->
+
+<!-- (C) The loadings of from the two PCA are the same. -->
+
+<!-- (D) None of the above. -->
+

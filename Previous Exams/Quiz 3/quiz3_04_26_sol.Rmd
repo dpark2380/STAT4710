@@ -1,0 +1,380 @@
+---
+title: "Quiz 3"
+author: "Modern Data Mining/ Linda Zhao"
+date: "April 26, 2022"
+output:
+  pdf_document:
+    keep_tex: yes
+    toc: yes
+    number_sections: true
+  html_document:
+    df_print: paged
+fontfamily: mathpazo
+fontsize: 11pt
+geometry: margin=1in
+header-includes:
+- \linespread{1.05}
+- \usepackage{framed}
+- \usepackage{fancyvrb}
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.height=5, fig.width=8)
+options(scipen = 1, digits = 2)
+options(xtable.comment = FALSE)
+
+if(!require('pacman')) {
+  install.packages('pacman')
+}
+pacman::p_load(tidyverse, ggplot2, glmnet, pROC, rpart, rpart.plot, randomForest, car, xtable, partykit)
+```
+
+
+\pagebreak 
+
+This is an open book, 30-minute quiz. But we will keep the submission window up to 40 minutes. Choose the correct answer(s). There might be more than one right answers in some questions. No calculations are needed. 
+
+On April 15, 1912, the largest passenger liner ever made collided with an iceberg during her maiden voyage. When the Titanic sank it killed 1502 out of 2224 passengers and crew. This sensational tragedy shocked the international community and led to better safety regulations for ships. Although there was some element of luck involved in surviving the sinking, some groups of people were more likely to survive than others. Our goal is to predict survived passengers based on their information.
+
+The `titanic` dataset contains information of 705 real Titanic passengers. Each row represents one person. The columns describe different attributes about the person including:
+
+- `Survived`: Survival indicator (0 = No; 1 = Yes)
+- `Pclass`: Passenger class (1 = 1st, Upper; 2 = 2nd, Middle; 3 = 3rd, Low)
+- `Sex`
+- `Age`
+- `SibSp`: The number of siblings/spouses aboard
+- `Parch`: The number of parents/children aboard
+- `LogFare`: The log of passenger fare
+- `Embarked`: Port of embarkation (C = Cherbourg; Q = Queenstown; S = Southampton)
+
+```{r}
+url <- 'https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv'
+titanic <- read_csv(url) %>% 
+    select(Survived, Pclass, Sex, Age, SibSp, Parch, Fare, Embarked) %>% 
+    drop_na() %>% mutate(across(c(Pclass, Sex, Embarked), factor)) %>% 
+    filter(Fare > 0) %>% mutate(LogFare = log(Fare)) %>% select(-Fare)
+head(titanic)
+```
+
+# Exploratory Data Analysis (2 points)
+
+**Q1.** (1 point) We first explore how passengers' survival is related to their fare.
+
+```{r}
+ggplot(titanic, aes(x=LogFare, y=Survived)) + 
+  geom_jitter(height = .05, aes(color = factor(Survived)))
+```
+
+True or false? Using `geom_jitter()` would be better than `geom_point()` since many passengers have similar value of LogFare and Survived.
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (A)  **
+
+**Q2.** (1 point) We next focus on the relation between survival and sex.
+
+```{r}
+ggplot(titanic) +
+  geom_bar(aes(x = Sex, fill = factor(Survived)), position = "dodge")
+```
+
+Based on the above barplot, choose the correct answer(s).
+
+(A) The survival rate of females is high than that of males.
+
+(B) The survival rate of females is lower than that of males.
+
+(C) More information is needed.
+
+**The answer is (A)**
+
+# Logistic Regression (18 points)
+
+## `fit0`: `glm(Survived ~ LogFare)`
+
+**Q3.** (4 points) We first investigate the relationship between the fare and the survival rate. We run a simple logistic regression of `Survived` on `LogFare`.
+```{r}
+fit0 = glm(Survived ~ LogFare, data = titanic, family = binomial)
+```
+
+Which equation(s) correctly describe the model `fit0`?
+
+(A) $\mathrm{Survived} = \beta_0 + \beta_1\times \mathrm{LogFare}$
+
+(B) $\mathbb P(\mathrm{Survived} = 1 \mid \mathrm{LogFare}) = \beta_0 + \beta_1\times \mathrm{LogFare}$
+
+(C) $\log \frac{\mathbb P(\mathrm{Survived} = 1 \mid \mathrm{LogFare})}{\mathbb P(\mathrm{Survived} = 0 \mid \mathrm{LogFare})} = \beta_0 + \beta_1\times \mathrm{LogFare}$
+
+(D) $\mathbb P(\mathrm{Survived} = 1 \mid \mathrm{LogFare}) = \frac{e^{\beta_0 + \beta_1\times \mathrm{LogFare}}}{1+e^{\beta_0 + \beta_1\times \mathrm{LogFare}}}$
+
+**The answers are (C) and (D) **
+
+
+**Q4.** (3 points) Here is the summary result for `fit0`.
+```{r results='asis',echo=F}
+print(xtable(summary(fit0), digits = 2))
+```
+
+Choose the correct statement(s). The fitted coefficients in `fit0` are obtained by
+
+(A) Maximizing the log likelihood $\mathcal L(\beta_0,\beta_1 \mid \mathrm{data})$.
+
+(B) Maximizing the probability $\mathbb P(\text{the outcome of data})$.
+
+(C) Minimizing the cross entropy.
+
+**The answers are (A), (B) and (C) **
+
+**Q5.** (1 point) Based on `fit0`, we classify a passenger as "Survived" if $\mathbb P(\mathrm{Survived} = 1 \mid \mathrm{LogFare})> 1/2$. What is the linear classification boundary?
+
+(A) $`r round(fit0$coef[1],3)` + `r round(fit0$coef[2],3)` \times \mathrm{LogFare} > \log(1) = 0$
+
+(B) $`r round(fit0$coef[1],3)` + `r round(fit0$coef[2],3)` \times \mathrm{LogFare} > 1/2$
+
+
+**The answer is (A) **
+
+## `fit1`: full model
+
+**Q6.** (1 point) We next run a logistic regression of `Survived` on all variables as `fit1`.
+
+```{r results='asis'}
+fit1 = glm(Survived ~ ., data = titanic, family = binomial)
+print(xtable(summary(fit1), digits = 3))
+```
+
+According to the summary table of `fit1`, which value would decrease by `r -round(fit1$coeff['SibSp'], 2)` if `SibSp` increases by one holding all other variables constant?
+
+(A) The probability of survival
+
+(B) The odds of survival
+
+(C) The log odds of survival
+
+**The answer is (C) **
+
+
+**Q7.** (2 points) 
+
+Based on the summary table of `fit1`, choose the correct statement(s).
+
+(A) The chance of survival is highest for people in `Pclass1`
+
+(B) The chance of survival is higher for female than male, given all other variables are the same
+
+**The answer is (B)**
+
+
+**Q8.** (1 point) Based on the summary table of `fit1`, we fail to reject the hypothesis that the probabilities of survival across the 3 classes of `Pclass` are the same at 0.001 level because `Pclass2` is not significant at 0.001 level, controlling for all other variables. True or false?
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (B)**
+
+**Q9.** (1 point)
+We are interested in testing the following hypothesis: 
+\[ H_0: \beta_{\mathrm{Parch}} = \beta_{\mathrm{Embarked}} = \beta_{\mathrm{LogFare}} = 0. \]
+True or false? We fail to reject the null hypothesis at 0.05 level because each of the $p$-value `Parch`, `Embarked` and `LogFare` is larger than 0.05. 
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (B)**
+
+
+**Q10.** (1 point) We build our first classifier using `fit1` model with threshold $1/2$. We can summarize how well this rule works by confusion matrix.
+
+```{r}
+fit1_pred = ifelse(fit1$fitted > 1/2, 1, 0)
+fit1_cfm = table(fit1_pred, titanic$Survived)
+fit1_cfm
+```
+
+Here, the row indicates $\widehat y$ and the column indicates $y$. What is the sensitivity of this rule based on the confusion matrix?
+
+(A) $`r fit1_cfm[1,1]`/(`r fit1_cfm[1,1]` + `r fit1_cfm[2,1]`)$
+
+(B) $`r fit1_cfm[2,2]`/(`r fit1_cfm[1,2]` + `r fit1_cfm[2,2]`)$
+
+(C) $`r fit1_cfm[2,1]`/(`r fit1_cfm[1,1]` + `r fit1_cfm[2,1]`)$
+
+
+**The answer is (B)**
+
+**Q11.** (1 point) Based on the confusion matrix above, what is the mis-classification error?
+
+(A) $(`r fit1_cfm[2,1]` + `r fit1_cfm[1,2]`)/(`r fit1_cfm[1,1]` + `r fit1_cfm[2,1]` + `r fit1_cfm[1,2]` + `r fit1_cfm[2,2]`)$
+
+(B) $(`r fit1_cfm[1,2]` + `r fit1_cfm[2,1]`)/(`r fit1_cfm[1,1]` + `r fit1_cfm[2,1]` + `r fit1_cfm[1,2]` + `r fit1_cfm[2,2]`)$
+
+(C)  $`r fit1_cfm[2,1]`/(`r fit1_cfm[1,1]` + `r fit1_cfm[2,1]`) + `r fit1_cfm[1,2]`/(`r fit1_cfm[1,2]` + `r fit1_cfm[2,2]`)$
+
+
+**The answer is (B)**
+
+
+**Q12.** (3 points) We will evaluate the performance of `fit1` using ROC curve.
+
+```{r}
+fit1.roc = roc(titanic$Survived, fit1$fitted)
+
+plot(1-fit1.roc$specificities, 
+     fit1.roc$sensitivities, col="blue", lwd=3, type="l",
+     xlab="False Positive", 
+     ylab="Sensitivity")
+legend("bottomright",
+       c(paste0("fit1 AUC=", round(fit1.roc$auc,2)) ),
+       col=c("blue"),
+       lty=1)
+abline(v=.2, lwd = 3)
+```
+
+Based on the above plot, choose the correct answer(s).
+
+(A) The ROC curve is drawn by computing the false positive rate and sensitivity with different thresholds. 
+
+(B) The classifier will predict the passengers' survival accurately in approximately 86% of the data because AUC is 0.86.
+
+(C) For the thresholds with false positive less than 0.2, the sensitivity will be less than 0.8.
+
+**The answers are (A) and (C)**
+
+# LASSO in Logistic Regression (2 points)
+
+**Q13.** (1 point) We next run LASSO in logistic regression from the full model to select variables using `lambda.1se`.
+
+```{r comment=""}
+set.seed(30301566)
+X = model.matrix(Survived~., data=titanic)[,-1]
+Y = pull(titanic, Survived)
+
+fit2.cv = cv.glmnet(X, Y, alpha=1, family="binomial", nfolds = 10, 
+                    type.measure = "deviance")  
+# plot(fit3.cv)
+coef.1se = coef(fit2.cv, s="lambda.1se")
+coef.1se = coef.1se[which(coef.1se!=0),] 
+coef.1se
+```
+
+True or false? The selected variables could change if we don't set a seed.
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (A)**
+
+**Q14.** (1 point) We refit the logistic regression with the variables chosen from LASSO as `fit2`. 
+
+```{r}
+fit2 = glm(Survived ~ Sex+Age+SibSp+LogFare+Pclass+Embarked, 
+           data = titanic, family = binomial)
+```
+
+True or false? All variables in `fit2` will be significant at 0.05 level since they are chosen from LASSO, i.e., the $p$-value of each variable will be less than 0.05.
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (B)**
+
+# Tree and Random Forest (4 points)
+
+**Q15.** (1 point) We fit a single tree model as `fit3` using `rpart()` package.
+
+```{r}
+fit3 = rpart(Survived ~ ., data=titanic, method='class')
+rpart.plot(fit3, extra=1, fallen.leaves=TRUE)
+```
+According to the fitted model, what is the predicted survival of the following passenger?
+
+(Hint: the left branch is "yes" and the right branch is "no". In each node, the number on the left is the number of 0's (dead) and the number on the right is the number of 1's (survived). The predicted value is shown on the top of each node and is based on the majority vote.)
+
+- `Pclass`: 3 (3rd, Low)
+- `Sex`: female
+- `Age`: 20
+- `SibSp`: 2
+- `Parch`: 2
+- `LogFare`: 1
+- `Embarked`: C (Cherbourg) 
+
+(A) 0
+
+(B) 1
+
+**The answer is (B)**
+
+
+**Q16.** (1 point) Based on `fit3`, choose the correct answer(s).
+
+(A) There are 10 different predicted probabilities of survival.
+
+(B) There are 19 different predicted probabilities of survival.
+
+**The answer is (A)**
+
+
+**Q17.** (1 point) We build a random forest to predict survival using all the variables as `fit4`. 
+
+```{r}
+fit4 = randomForest(as.factor(Survived)~., data=titanic, mtry=3, 
+                    ntree=1000, importance = TRUE)
+```
+
+Choose the best description that describes how this model was built.
+
+(A) Bagging 1000 bootstrap trees with 3 features randomly sampled for each tree.
+
+(B) Randomly sampling 3 features and bagging 1000 bootstrap trees.
+
+(C) Bagging 1000 bootstrap trees with each split of each tree based on the best variable chosen out 3 randomly sampled features.
+
+**The answer is (C)**
+
+
+**Q18.** (1 point) True or false? The training error of `fit4` (random forest) is always smaller than that of `fit3` (single tree). 
+
+(A) TRUE
+
+(B) FALSE
+
+**The answer is (B)**
+
+
+# Neural Network (4 points)
+
+**Q19.** (4 points) We finally build a neural network to predict survival using all the variables. 
+
+
+```{r eval=FALSE}
+model = keras_model_sequential() %>%
+  layer_dense(units = 16, activation = "relu", input_shape = c(9)) %>% 
+  layer_dense(units = 8, activation = "relu") %>%  
+  layer_dense(units = 2, activation = "softmax")
+```
+
+Which statement(s) are correct?
+
+(A) The model is same as logistic regression model.
+
+(B) The model is built on one layer with 48 neurons.
+
+(C) There are two layers with 16 and 8 neurons in each layer respectively. Each neuron is created by taking the linear combination of all the neurons from the previous layer then apply the relu function.
+
+(D) There are two layers with 16 and 8 neurons in each layer respectively. Each neuron is created by taking the linear combination of all the neurons from the previous layer.
+
+
+**The answer is (C)**
+
+
+
+

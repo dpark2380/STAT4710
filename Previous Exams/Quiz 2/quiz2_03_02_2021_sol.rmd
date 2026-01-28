@@ -1,0 +1,202 @@
+---
+title: "Quiz 2"
+author: "Modern Data Mining"
+date: "March 2, 2021"
+output:
+  pdf_document:
+    keep_tex: yes
+    toc: no
+  html_document:
+    number_sections: yes
+    self_contained: no
+    toc: yes
+    toc_depth: 2
+  word_document:
+    toc: yes
+    toc_depth: 2
+graphics: yes
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(tidy=TRUE, fig.width=6.5, fig.height=4, fig.align='left',
+                      dev = 'pdf')
+options(scipen = 1, digits = 3)
+# install.packages("pacman")
+library("pacman")
+pacman::p_load(dplyr, ggplot2, magrittr, gridExtra, reshape, rmarkdown, leaps, glmnet, knitr, skimr)
+options(xtable.comment = FALSE)
+```
+
+
+**Instruction:** This is an open book, 10-15 minute quiz. Answer all 9 questions and choose the correct answer. 
+
+\vspace{.1in}
+
+The first portion of the quiz uses a subset of 200 subjects that are randomly chosen from `IQ.Full.csv`. From this dataset we extracted their 4 AFQT tests: `Arith`, `Word`, `Parag` and `Math`. The dataset is named `afqt`.
+
+
+```{r}
+data.full <- read.csv("IQ.Full.csv")  
+data1 <- data.full %>% select(Arith,Word,Parag, Math)
+set.seed(1)
+n <- dim(data1)[1]
+afqt <- data1[sample(n, 200, replace = FALSE), ] # take 200 people
+names(afqt)
+afqt.stat <- summary(afqt)
+afqt.mean <- colMeans(afqt)
+afqt.sd <- apply(afqt, 2, sd)
+afqt.mean
+afqt.sd
+
+```
+
+**1.** We first perform PCA to summarize the set of four tests. The four tests are first centered and scaled.
+
+```{r}
+afqt.pca <- prcomp(afqt, center = TRUE, scale. = TRUE)
+afqt.pca$rotation
+```
+
+PC1 scores are *approximately* equal to:
+
+(A) .5 (Arith + Word + Parag + Math)
+
+(B) .5 [(Arith - `r afqt.mean[1]`)/`r afqt.sd[1]`) +
+        (Word - `r afqt.mean[2]`)/`r afqt.sd[2]`) +
+        (Parag - `r afqt.mean[3]`)/`r afqt.sd[3]`) +
+        (Math - `r afqt.mean[4]`)/`r afqt.sd[4]`)]
+
+
+**Answer (B):** Since we ran PCA for centered and scaled scores, that means PC1 is obtained by (B)
+
+
+        
+**2.** The `PC1` score of `afqt.pca` in question 1 has the largest variance among all 4 PC scores.
+
+(A) True
+
+(B) False
+
+
+**Answer (A):** The goal of doing PCA is to find a new set of uncorrelated scores such that `PC1` has largest variance, then `PC2`... 
+
+
+**3.** Based on the following PVE plot we see that 
+```{r}
+plot(summary(afqt.pca)$importance[2, ], pch=16,
+     xlab="PC index",
+     ylab = "PVE")
+```
+(A) PC1 accounts for approximately 80% of the total variance among the 4 PCs
+
+(B) PC1 accounts for approximately 20% of the total variance among the 4 PCs
+
+
+**Answer (A):** By definition of PVE we know that var(PC1) is 80% of the total variances among 4 PC's. 
+
+We next run a kmeans clustering analysis specifying 2 clusters.
+```{r}
+afqt.kmeans <- kmeans(afqt, centers = 2)
+afqt.kmeans$size
+```
+
+**4** Choose the correct answer:
+
+(A) There are 100 subjects in cluster 1 and another 100 in cluster 2
+
+(B) There are `r afqt.kmeans$size[1]` in cluster 1 and `r afqt.kmeans$size[2]` in cluster 2.
+
+
+**Answer (B)**
+
+
+The remaining quiz questions are about regression. We will use a subset from the `Cars_04` data that has been used in class. We will use `MPG_Hwy` as the response variable. 
+
+Let us first take a subset of the data and name it car.data. 
+```{r, echo = T}
+set.seed(10)
+car.temp <- read.csv("Cars_04.csv")
+s.index <- sample(nrow(car.temp), 200)
+car.data <- car.temp[s.index, ]
+summary(car.data)
+```
+
+
+
+
+We then fit a linear model `fit1: MPG_Hwy vs. Horsepower`
+
+```{r}
+fit1 <- lm(MPG_Hwy~Horsepower, car.data)
+fit1.s <- summary(fit1)
+fit1.s
+```
+
+**5.** Based on summary of `fit1`, choose correct answer(s).
+
+(A) On average `MPG_Hwy` decreases  `r abs(round(fit1.s$coeff[2],3))` when `Horsepower` increases by 1.
+ 
+(B) Take two cars, car1 with `Horsepower=220` and car2 with `Horsepower=221`; `fit1` tells us `MPG_Hwy` is guaranteed to be higher in car1 than car2.
+
+
+**Answer (A):** Though the mean of `MPG_Hwy` for cars with `Horsepower=220` is higher than that of cars with `Horsepower=221`, the `MPG_Hwy`s can be larger or small comparing two individual cars from each group. 
+
+Next, we add one variable `Weight` to `fit1` and store the result in `fit2`.
+
+```{r}
+fit2 <- lm(MPG_Hwy~Horsepower + Weight, car.data)
+fit2.s <- summary(fit2)
+fit2.s
+```
+
+**6.** From `fit2`, we see that 1 unit increase in horsepower always results in a decrease in `MPG_Hwy` on average by `r abs(fit2.s$coeff[2])`.  
+ 
+ (A) True
+ 
+ (B) False
+ 
+
+**Answer (B):**  Only if they have the same `Weight`s. 
+
+
+ 
+**7.** Based on `fit2`, we would like to estimate the mean of `MPG_Hwy` for all cars with the following measurements: `Horsepower = 240`, `Weight = 3.5`, with 4 seats and 180'' long. 
+
+(A) We can not do it since `Seats` and `Length` are not included in the `fit2`
+
+(B) It is $$`r fit2.s$coeff[1]` `r fit2.s$coeff[2]` \times 240 `r fit2.s$coeff[3]`\times 3.5 $$
+
+
+**Answer (B):**  the predicition equation can be used as long as the predictors are give. On the other hand we can't use `fit2` to  estimate the mean of cars with `Horsepower = 240`. 
+
+**We didn't grade this question due to a typo.**
+
+
+
+Model diagnoses for `fit2`. Choose the correct answers.
+```{r}
+plot(fit1, 1)
+```
+
+
+**8.** Choose one answer.
+
+(A) The linearity might be a problem since cars with smaller `MPG_Hwy` seem to be underestimated. 
+
+(B) The linearity might be a problem since cars with smaller `MPG_Hwy` seem to be overestimated. 
+
+
+**Answer: (A)**  The residuales ($y -\hat y$ are all > 0 for smaller `MPG_Hwy`. 
+
+
+**9.** `fit2` can be used to reject $H_0: \beta_1 = \beta_2 =0$ at a significance level of 0.001 for the following reason:
+
+(A) Because of a large $R^2$.
+
+(B) Because the $F$ test in the summary report has a p-value much smaller than .001. 
+
+
+**Answer: (B)**  Once again the larger $R^2$ is the more useful a model is. But we need to use $F$ to see precisely how large $R^2$ to be to reject the null hypothesis at an $\alpha=.001$. Check the precise equation between $R^2$ and $F$ in our lecture please.
+
+
+
+
