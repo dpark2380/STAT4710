@@ -108,8 +108,31 @@ Select only the variables Age, Gender, Education Level, Household Income in 2013
 Change the variable names to be "age", "gender", "education", "income", "sirius", "wharton", "worktime".
 
 ```{r}
-survey   <- read_csv("data/Survey_results_final.csv")
-head(survey)
+survey <- read_csv("data/Survey_results_final.csv")
+
+survey <- survey %>%
+  select(
+    `Answer.Age`,
+    `Answer.Gender`,
+    `Answer.Education`,
+    `Answer.HouseHoldIncome`,
+    `Answer.Sirius Radio`,
+    `Answer.Wharton Radio`,
+    WorkTimeInSeconds
+  ) %>%
+  rename(
+    age      = `Answer.Age`,
+    gender   = `Answer.Gender`,
+    education= `Answer.Education`,
+    income   = `Answer.HouseHoldIncome`,
+    sirius   = `Answer.Sirius Radio`,
+    wharton  = `Answer.Wharton Radio`,
+    worktime = WorkTimeInSeconds
+  )
+
+problems(survey)
+names(survey)
+
 
 ```
 
