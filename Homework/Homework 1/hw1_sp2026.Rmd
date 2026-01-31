@@ -31,6 +31,9 @@ options(scipen = 0, digits = 3)  # controls base R output
 # check if you have ISLR package, if not, install it
 if(!require('pacman')) {install.packages('pacman')}
 pacman::p_load(ISLR, readxl, tidyverse, magrittr, dplyr, ggplot2)
+
+library(readr)
+library(dplyr)
 ```
 
 
@@ -108,7 +111,13 @@ Select only the variables Age, Gender, Education Level, Household Income in 2013
 Change the variable names to be "age", "gender", "education", "income", "sirius", "wharton", "worktime".
 
 ```{r}
-survey <- read_csv("data/Survey_results_final.csv")
+survey <- suppressWarnings(
+  readr::read_csv(
+    "data/Survey_results_final.csv",
+    col_types = readr::cols(.default = readr::col_character()),
+    show_col_types = FALSE
+  )
+)
 
 survey <- survey %>%
   select(
@@ -119,7 +128,9 @@ survey <- survey %>%
     `Answer.Sirius Radio`,
     `Answer.Wharton Radio`,
     WorkTimeInSeconds
-  ) %>%
+  )
+
+survey <- survey %>%
   rename(
     age      = `Answer.Age`,
     gender   = `Answer.Gender`,
@@ -130,10 +141,6 @@ survey <- survey %>%
     worktime = WorkTimeInSeconds
   )
 
-problems(survey)
-names(survey)
-
-
 ```
 
 2. Handle missing/wrongly filled values of the selected variables
@@ -142,17 +149,87 @@ As in real world data with user input, the data is incomplete, with missing valu
 
 Tip: Reflect on the reasons for which data could be wrong or missing. How would you address each case? For this homework, if you are trying to predict missing values with regression, you are definitely overthinking. Keep it simple.
 
+```{r}
+colSums(is.na(survey))
+survey %>% filter(if_any(everything(), is.na))
+survey %>% filter(trimws(tolower(education)) == "select one")
+
+# Removing no age entry.
+survey <- survey %>% filter(!is.na(age))
+
+# Changing "select one" entries to "Other"
+survey <- survey %>% mutate(education = if_else(tolower(trimws(education)) == "select one", "Other", education))
+
+
+# Setting NA entries of sirius and wharton to no.
+survey <- survey %>%
+  mutate(
+    sirius  = if_else(is.na(sirius), "No", sirius),
+    wharton = if_else(is.na(wharton), "No", wharton)
+  )
+
+# Setting NA entries of gender to not specified
+survey <- survey %>%
+  mutate(
+    gender  = if_else(is.na(gender), "Not specified", sirius),
+  )
+
+# Setting NA entries of income to $0.
+survey <- survey %>%
+  mutate(
+    income  = if_else(is.na(income), "$0", sirius),
+  )
+
+colSums(is.na(survey))
+
+```
+
+It is evident that there are a mix of different attributes which are missing. 
+Age: There is one entry with no age. That row will be invalidated, as all people have ages. 
+Gender: There are a couple entries with no gender. Looking at the data manually, the only other genders are Male and Female. People may identify with different genders, explaining the NA entries.
+Education: No entries are NA, however there were 19 entries that had "select one". These entries have been renamed to "Other".
+Income: NA income entries are be interpreted as the survey participant being unemployed.
+Sirius / Wharton: NA entries will be treated as false.
+
+
 3. Brief summary 
 
 Write a brief report to summarize all the variables collected. Include both summary statistics (including sample size) and graphical displays such as histograms or bar charts where appropriate. Comment on what you have found from this sample. (For example - it's very interesting to think about why would one work for a job that pays only 10cents/each survey? Who are those survey workers? The answer may be interesting even if it may not directly relate to our goal.)
+
+```{r}
+
+survey %>% count(sirius)
+survey %>% count(wharton)
+
+survey %>%
+  count(education) %>%
+  ggplot(aes(x = education, y = n, fill = education)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  guides(fill = "none")
+
+
+
+
+
+```
+
 
 ## Sample properties
 
 The population from which the sample is drawn determines where the results of our analysis can be applied or generalized. We include some basic demographic information for the purpose of identifying sample bias, if any exists. Combine our data and the general population distribution in age, gender and income to try to characterize our sample on hand.
 
-1. Does this sample appear to be a random sample from the general population of the USA? Why it is crucial to have randomness here? 
+1. Does this sample appear to be a random sample from the general population of the USA? Why it is crucial to have randomness here?
+
+```{r}
+
+
+```
 
 2. Does this sample appear to be a random sample from the MTURK population?
+
+
+
 
 Note: You can not provide evidence by simply looking at our data here. For example, you need to find distribution of education in our age group in US to see if the two groups match in distribution. You may need to gather some background information about the MTURK population to have a slight sense if this particular sample seem to a random sample from there... Please do not spend too much time gathering evidence. 
 
@@ -160,7 +237,6 @@ Note: You can not provide evidence by simply looking at our data here. For examp
 
 Provide an approximate **95\% confidence interval** of the Wharton audience size by May of 2014. Assume that the sample is a random sample of the MTURK population, and that the proportion of Wharton listeners vs. Sirius listeners in the general population is the same as that in the MTURK population. Write a brief executive summary to summarize your findings and how you came to that conclusion.
 
-To be specific, you should include:
 
 1. Goal of the study
 2. Method used: data gathering, estimation methods
@@ -188,173 +264,231 @@ A good proposal will give an accurate estimation with the least amount of money 
 
 # Case study 2: Women in Science
 
-
 Are women underrepresented in science in general? How does gender relate to the type of educational degree pursued? Does the number of higher degrees increase over the years? In an attempt to answer these questions, we assembled a data set (`WomenData_06_16.xlsx`) from [NSF](https://ncses.nsf.gov/pubs/nsf19304/digest/field-of-degree-women) about various degrees granted in the U.S. from 2006 to 2016. It contains the following variables: Field (Non-science-engineering (`Non-S&E`) and sciences (`Computer sciences`, `Mathematics and statistics`, etc.)), Degree (`BS`, `MS`, `PhD`), Sex (`M`, `F`), Number of degrees granted, and Year.
 
 Our goal is to answer the above questions only through EDA (Exploratory Data Analyses) without formal testing. We have provided sample R-codes in the appendix to help you if needed. 
 
-
 ## Data preparation  
 
-1. Understand and clean the data
+### Understand and clean the data
 
 Notice the data came in as an Excel file. We need to use the package `readxl` and the function `read_excel()` to read the data `WomenData_06_16.xlsx` into R. 
 
-a) Read the data into R.
+#### Read the data into R.
 
-b) Clean the names of each variables. (Change variable names to  `Field`,`Degree`, `Sex`, `Year` and `Number` )
+```{r}
+women_data <- read_excel("data/WomenData_06_16.xlsx")
+w_data <- women_data
+```
 
-c) Set the variable natures properly. 
+#### Clean the names of each variables. (Change variable names to  `Field`,`Degree`, `Sex`, `Year` and `Number` )
 
-d) Any missing values?
+```{r}
+colnames(w_data)
+w_data <- w_data %>%
+  rename(`Field` = `Field and sex`,
+         `Number` = `Degrees Awarded`)
+colnames(w_data)
+```
 
-2. Write a summary describing the data set provided here. 
+#### Set the variable natures properly. 
 
-a) How many fields are there in this data?
+```{r}
+w_data <- w_data %>%
+  mutate( Field = as.factor(Field),
+          Degree = as.factor(Degree),
+          Sex = as.factor(Sex)
+          )
+summary(w_data)
+```
 
-b) What are the degree types? 
+#### Any missing values?
 
-c) How many year's statistics are being reported here? 
+```{r}
+colSums(is.na(w_data)
+        )
+```
 
+### Write a summary describing the data set provided here. 
 
+#### How many fields are there in this data?
+
+```{r}
+dim(w_data)
+```
+
+There are 5 different variables (Field, Degree, Sex, Year and Number), and 660 data entries in the data set.
+
+#### What are the degree types?
+
+```{r}
+unique(w_data$Field)
+```
+There are 10 degree types: Agricultural Sciences; Biological Sciences; Computer Sciences; Earth, Atmospheric, and Ocean Sciences; Mathematics and Statistics; Physical Sciences; Psychology; Social Sciences; Engineering; and Non-S&E.
+
+#### How many year's statistics are being reported here? 
+
+```{r}
+length(unique(w_data$Field)
+       )
+```
+
+10 years of statistic are being reports (2006 - 2016).
 
 ## BS degrees in 2015
 
-Is there evidence that more males are in science-related fields vs `Non-S&E`? Provide summary statistics and a plot which shows the number of people by gender and by field. Write a brief summary to describe your findings.
+### Is there evidence that more males are in science-related fields vs `Non-S&E`? Provide summary statistics and a plot which shows the number of people by gender and by field. Write a brief summary to describe your findings.
+
+The number of males and females in S&E were relatively similar in 2015 with 327,122 and 322,935 people graduating respectively. This is visualised in the Bar Chart where the bars for Male and Female S&E Graduates is essentially the same. Furthermore, this shows that there are many more gradutes in non-S&E courses compared with S&E courses. However, this could be attributed to a limited range of degrees available in S&E courses compared with non-S&E courses.
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(SE, Sex) %>%
+  summarise(SE_number = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = SE, y = SE_number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  theme(axis.text.y = element_text(angle = 60)) +
+  labs(
+      title = "Number of Bachelor Graduates by Gender, Degree Type and Field (2015)",
+      x = "Field",
+      y = "Number of Graduates",
+      fill = "Gender"
+    )
+```
+
+```{r include=TRUE, results='asis', echo=FALSE}
+tab <- w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(SE, Sex) %>%
+  summarise(Total = sum(Number),
+            .groups = "drop")
+
+knitr::kable(tab, digits = 2, caption = "Summary statistics by S&E group and gender in 2015")
+```
 
 ## EDA bringing type of degree, field and gender in 2015
 
-Describe the number of people by type of degree, field, and gender. Do you see any evidence of gender effects over different types of degrees? Again, provide graphs to summarize your findings.
+### Describe the number of people by type of degree, field, and gender. Do you see any evidence of gender effects over different types of degrees? Again, provide graphs to summarize your findings.
+
+The number of people pursuing courses in Bachelors and Masters degrees in 2015 is very unequal with around 1,500,000 and 700,000 graduating in Mathematics and Statistics respectively, compared with all of the other courses where graduates numbered less than around 200,000. This pattern is evident in PhD courses to a less extent, with around 30,000 people graduating in Mathematics and Statistics compared with less than 10,000 for the other subject areas.
+
+Females make up a larger proportion of graduates in Mathematics and Statistics as well as Physical Sciences across all three degree types. Conversely, Males comprise the most graduates in the subject area  Earth, Atmospheric and Ocean Sciences, with the remaining topics being relatively equally weighted in relation to gender.
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Bachelor Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "MS") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Masters Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "PhD") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of PhD Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
 
 ## EDA bring all variables 
 
-In this last portion of the EDA, we ask you to provide evidence numerically and graphically: Do the number of  degrees change by gender, field, and time? 
+### In this last portion of the EDA, we ask you to provide evidence numerically and graphically: Do the number of  degrees change by gender, field, and time? 
+
+Overtime, females have consistently had more graduates in subject areas including Agricultural Sciences, Biological Sciences, Non-S&E, Psychology and Social Sciences. This differs to Computer Science, Earth, Atmospheric and Ocean Sciences, Engineering, Mathematics and Statistics and Physical Sciences which have consistently more male graduates each year.
+
+All subject areas have experienced strong growth in graduate numbers, however, Earth, Atmospheric and Ocean Sciences, and Social Sciences have experienced slower growth in the past three years, with Social Sciences even falling in popularity.
+
+Finally, Agricultural Sciences and Earth, Atmospheric and Ocean Sciences initially had relatively equal numbers of male and femal graduates in 2006, however, both have diverged significantly over the 10 years. This has resulted in females studying Agricultural Sciences more and males studying Earth, Atmospheric and Ocean Sciences more.
+
+```{r}
+w_data %>%
+  group_by(Year, Field, Sex) %>%
+  summarise(total_degrees = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = Year, y = total_degrees, color = Sex)) +
+  geom_line() +
+  facet_wrap(~ Field, scales = "free_y") +
+  labs(
+    title = "Degrees Over Time by Gender and Field Group",
+    x = "Year",
+    y = "Number of Degrees",
+    color = "Gender"
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
 
 ## Women in Data Science
 
-Finally, is there evidence showing that women are underrepresented in data science? Data science is an interdisciplinary field of computer science, math, and statistics. You may include year and/or degree.
+### Finally, is there evidence showing that women are underrepresented in data science? Data science is an interdisciplinary field of computer science, math, and statistics. You may include year and/or degree.
+
+Yes, females have been underrepresented in data science consistently across the decade. Whilst the total number of females studying this subject area have increased from 10,000 to 12,000, they are still significantly less than the current 53,000 males gradutates, and have experienced much slower growth in popularity compared with the 15,000 increase in males.
+
+```{r}
+w_data %>%
+  filter(Field %in% c("Computer sciences", "Mathematics and statistics")) %>%
+  ggplot(aes(x = Year, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Graduates by Gender in Data Science",
+    x = "Year",
+    y = "Number of Graduates",
+    fill = "Gender"
+  )
+```
 
 ## Final brief report
 
-Summarize your findings focusing on answering the questions regarding if we see consistent patterns that more males pursue science-related fields. Any concerns with the data set? How could we improve on the study?
+### Summarize your findings focusing on answering the questions regarding if we see consistent patterns that more males pursue science-related fields. Any concerns with the data set? How could we improve on the study?
 
-## Appendix
+Over the 10 year study, we consistently see males pursuing science-related fields more than females. Moreover, this gender gap has almost doubled over this time period.
 
-To help out, we have included some R-codes here as references. You should make your own chunks filled with texts going through each items listed above. Make sure to hide the unnecessary outputs/code etc. 
+This study raised no issues about the integrity or quality of the data set. An addition could be considering individuals who study majors from different schooles (S&E and non-S&E). The reason for why females are underrepresented may be because they are not having their full degree structure reported in this study (e.g. someone could major in English and Chemistry in an Arts Degree - this would be shown as Non-S&E).
 
-1. Clean data
+To improve this study this experiment should be repeated numerous times, improving validity and reliability. Furthermore, it should be conducted across multiple universities in the same region, limiting the impact of potential bias from the current test population.
 
-```{r data wrangling, echo = FALSE, warning = FALSE}
-# For the demonstration purpose, we show this R-chunk by taking echo=TRUE
-# In your final report you should hide all the R-chunks to keep your report flowing well.
-wsci     <- read_excel("data/WomenData_06_16.xlsx")
-mlb_wide <- read_csv("data/MLPayData_Total.csv")
-mlb_long <- read_csv("data/baseball.csv")
-
-names(wsci)
-head(wsci)
-#change names
-wsci %<>% 
-  rename(Field = 'Field and sex')
-# set the field, degree and sex as factors
-wsci %<>% 
-  mutate( Field = as.factor(Field))
+```{r}
+  w_data %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(Year, SE, Sex) %>%
+  summarise(SE_number = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = Year, y = SE_number, color = Sex)) +
+  geom_line() +
+  facet_wrap(~ SE, scales = "free_y") +
+  labs(
+    title = "Graduates Over Time by Gender: S&E vs Non-S&E",
+    x = "Year",
+    y = "Number of Graduates",
+    color = "Gender"
+  )
 ```
-
-
-```{r, echo=FALSE}
-wsci %<>%
-   rename(Field = "Field and sex",
-          Number = "Degrees Awarded") %>%
-   mutate(Field = as.factor(Field),
-          Degree = as.factor(Degree),
-          Sex = as.factor(Sex))
-```
-
-
-2. A number of sample analyses 
-
-```{r eval = FALSE, echo = FALSE}
-wsci %>%  # to get the average number of ppl by gender
-  group_by(Field, Sex) %>%
-  summarise(deg = mean(Number))
-
-wsci %>%
-  filter(Year == 2007) %>%
-  ggplot(aes(x = Field, y = Number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_grid(Degree~., scales = "free_y") +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
-  ggtitle("Degrees granted across fields by degree and gender") 
-
-wsci %>%
-  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
-  group_by(SE, Sex) %>%
-  summarise(SE_number = sum(Number)) %>%
-  ggplot(aes(x = SE, y = SE_number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  theme(axis.text.y = element_text(angle = 60)) +
-  ggtitle("Degrees granted by S&E vs non-S&E by gender")
-
-wsci %>%
-  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
-  group_by(SE, Sex, Year) %>%
-  summarise(SE_number = sum(Number)) %>%
-  group_by(SE, Year) %>%
-  mutate(ratio = SE_number / sum(SE_number)) %>%
-  filter(Sex == "Female") %>%
-  ggplot(aes(x = Year, y = ratio, color = SE)) +
-  geom_point() + geom_line() +
-  ggtitle("Female proportion in SE/non-SE across year")
-
-wsci %>%
-  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
-  group_by(SE, Sex, Year, Degree) %>%
-  summarise(SE_number = sum(Number)) %>%
-  group_by(SE, Year, Degree) %>%
-  mutate(ratio = SE_number / sum(SE_number)) %>%
-  filter(Sex == "Female") %>%
-  ggplot(aes(x = Year, y = ratio, color = SE)) +
-  geom_point() + geom_line() +
-  facet_grid(~Degree)+
-  ggtitle("Female proportion in SE/non-SE across year by degree")
-
-
-wsci %>%
-  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
-  group_by(SE, Sex, Year, Degree) %>%
-  summarise(SE_number = sum(Number)) %>%
-  ggplot(aes(x = Year, y = SE_number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_grid(SE~Degree, scales = "free_y") +
-  ggtitle("Degrees granted by sex, degree and SE")
-
-
-wsci %>%
-  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
-  group_by(SE, Sex, Year, Degree) %>%
-  summarise(SE_number = sum(Number)) %>%
-  ggplot(aes(x = Year, y = SE_number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "fill") +
-  facet_grid(SE~Degree, scales = "free_y") +
-  ggtitle("Degrees granted proportion by sex across degree and SE")
-
-
-wsci %>%
-  filter(Field %in% c("Computer sciences", "Mathematics and statistics")) %>%
-  ggplot(aes(x = Year, y = Number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_grid(Field~Degree, scales = "free_y") +
-  ggtitle("Degrees granted pr option by sex across degree and SE")
-
-
-wsci %>%
-  ggplot(aes(x = Year, y = Number, fill = Sex)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_grid(Field~Degree, scales = "free_y") +
-  ggtitle("Degrees granted proportion by sex across degree and SE")
-```
-
 
 
 
