@@ -1,0 +1,160 @@
+---
+title: "STAT4710 HW1 Q3"
+author: "Wilson Zhang"
+date: "2026-01-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = "markup", fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+# check if you have ISLR package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(ISLR, readxl, tidyverse, magrittr, dplyr, ggplot2)
+```
+
+# Loading Data
+``` {r, echo = TRUE} 
+pay_data <- read_csv("data/MLPayData_Total.csv")
+team_data <- read_csv("data/Baseball.csv")
+
+```
+
+# 4.1 - Relationship between payroll changes and performance
+
+## Part a)
+In describing the increment of payroll in each year, there are several possible approaches. While one approach is to take the difference in payroll between year $x$ and year $x - 1$, another approach is to take $log(x) - log(x - 1)$. The second approach is objectively better as it calculates the percentage change year on year instead of giving an absolute number change. This helps provide a more informative view towards the scale of the payroll increments year on year. Furthermore, a clean property of using the log measure to calculate percentage changes is that in contrast to the typical approach, it maintains symmetry of percentage changes where the percentage increase from $a$ to $b$ is equal to the percentage decrease from $b$ to $a$. 
+
+## Part b)
+``` {r, echo = TRUE}
+diff_log <- team_data %>%
+  filter(year %in% c(2012, 2013)) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(diff_log = log(payroll) - lag(log(payroll)))
+
+head(diff_log)
+
+```
+
+## Part c)
+``` {r, echo = TRUE}
+team_data <- team_data %>% 
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(diff_log = log(payroll) - lag(log(payroll)))
+
+head(team_data)
+```
+
+# 4.2 - Exploratory Questions
+
+## Part a)
+``` {r, echo = TRUE}
+years_of_interest <- c(2010, 2011, 2012, 2013, 2014)
+
+payroll_increase <- team_data %>%
+  filter(year %in% years_of_interest) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(increase = log(payroll) - lag(log(payroll), 4)) %>%
+  filter(year == 2014) %>%
+  ungroup() %>%
+  arrange(desc(increase)) %>%
+  slice_head(n = 5)
+
+head(payroll_increase)
+```
+
+## Part b)
+``` {r, echo = TRUE}
+performance_increase <- team_data %>%
+  filter(year %in% years_of_interest) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(per_increase = win_pct - lag(win_pct, 4)) %>%
+  filter(year == 2014) %>%
+  arrange(desc(per_increase)) %>%
+  ungroup()
+
+head(performance_increase)
+```
+
+# 4.3 Do log increases in payroll imply better performance?
+``` {r, echo = TRUE}
+performance_to_payroll <- team_data %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(pay_delta = log(payroll) - lag(log(payroll))) %>%
+  mutate(performance_delta = win_pct - lag(win_pct)) %>%
+  drop_na() %>%
+  ungroup()
+
+total_performance_to_payroll <- team_data %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(pay_delta = log(payroll) - lag(log(payroll), 16)) %>%
+  mutate(performance_delta = win_pct - lag(win_pct, 16)) %>%
+  drop_na() %>%
+  ungroup()
+```
+
+``` {r, echo = TRUE}
+ggplot(performance_to_payroll, aes(x = pay_delta, y = performance_delta)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Log payroll change (year on year)",
+    y = "Win percentage change (year on year)",
+    title = "Payroll growth vs team performance"
+  )
+```
+``` {r, echo = TRUE}
+ggplot(total_performance_to_payroll, aes(x = pay_delta, y = performance_delta)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Log payroll change",
+    y = "Win percentage change",
+    title = "Payroll growth vs team performance across total period"
+  )
+```
+``` {r, echo = TRUE}
+cor(performance_to_payroll$pay_delta,
+    performance_to_payroll$performance_delta)
+
+model <- lm(performance_delta ~ pay_delta,
+            data = performance_to_payroll)
+
+summary(model)
+```
+From the data provided above, we can see that there is very little correlation between log payroll increases and petter team performance. In the graphs, we can observe that while the slope is positive, it is extremely small, indicating a very weak linear relationship. This is further supported by the correlation value of **0.0377** which is close to 0 or no correlation. Furthermore, the low $R^2$ value of **0.00142** indicates that payroll changes explain only 0.14% of the variation in performance changes, meaning that this model has almost no explanatory power. Therefore, we can conclude that log payroll increases do not lead to better team performance.
+
+# 4.4 - Comparison
+``` {r, echo = TRUE}
+
+model_one <- lm(win_pct ~ pay_delta,
+            data = performance_to_payroll)
+
+model_two <- lm(win_pct ~ log(payroll),
+            data = performance_to_payroll)
+
+summary(model_one)
+summary(model_two)
+
+```
+From the summaries attained above, we can observe that model one (using yearly increases in payroll) has an $R^2$ value of **0.0703** and that model two (using yearly payroll) has an $R^2$ value of 0.0664. As such, we can see that model 1 has more explanatory power given that the model accounts for more of the variance. However, the difference between the two values is very small so while yearly increase in payroll would serve as a slightly better measure, the difference is very small and the two models have similar explanatory power. 
+
+# 4.5 - Going beyond EDA
+
+Going forward, a more reasonable way to study the relationship between payroll and team performance beyond simple plots would be by using linear regression alongside more statistical analysis including the $R^2$ value, model comparisons and slope tests. 
+
+Process: In performing my analysis, GAI, particularly the Chat-GPT model, guided my analysis by suggesting further methods of testing the relationships between the given variables, in particular linear regression and interpreting the $R^2$ value. As such, I incorporated such features into my analysis and drew upon their data in reaching a conclusion for the previous questions. 
+
+These methods are better than the basic EDA methods as it uses formal statistical models rather than just relying on visual patterns. Furthermore, it quantifies relationships using measures such as correlations allowing for direct comparison of measures such as payrolls or increasing payrolls. Furthermore, it reduces the risk of formulating incorrect conclusions because of noisy scatter plots or other visual factors. 
+
+In conclusion, from the above analysis, we can conclude that there is a very weak relationship between payroll and performance. Payroll increases have shown very little correlation with performance increases and regression tests have shown that very little of the variability in performance can be attributed to payroll data. The limitations of this conclusion lie in the simplicity of the model which fails to consider the influence of other factors in determining a relationship between payroll and performance. Furthermore, only a linear model was used and as such, we were unable to test for other types of non-linear relationships.
+
+
+
+
