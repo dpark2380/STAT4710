@@ -6,10 +6,6 @@ author:
 - Wilson Zhang
 date: 'Due: 11:59PM,  Feb 1, 2026'
 output:
-  pdf_document:
-    number_sections: yes
-    toc: yes
-    toc_depth: '4'
   html_document:
     code_folding: show
     highlight: haddock
@@ -18,6 +14,10 @@ output:
     toc: yes
     toc_depth: 4
     toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
   word_document:
     toc: yes
     toc_depth: '4'
@@ -26,7 +26,7 @@ urlcolor: blue
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, results = "hide", fig.width=8, fig.height=4)
+knitr::opts_chunk$set(echo = FALSE, results = "markup", fig.width=8, fig.height=4)
 options(scipen = 0, digits = 3)  # controls base R output
 # check if you have ISLR package, if not, install it
 if(!require('pacman')) {install.packages('pacman')}
@@ -39,60 +39,13 @@ library(dplyr)
 
 \pagebreak
 
-# Overview
-
-This is a fast-paced course that covers a lot of material. There will be a large amount of references. You may need to do your own research to fill in the gaps in between lectures and homework/projects. It is impossible to learn data science without getting your hands dirty. Please budget your time evenly. Last-minute work ethic will not work for this course. 
-
-Homework in this course is different from your usual homework assignment as a typical student. Most of the time, they are built over real case studies.  While you will be applying methods covered in lectures, you will also find that extra teaching materials appear here.  The focus will be always on the goals of the study, the usefulness of the data gathered, and the limitations in any conclusions you may draw. Always try to challenge your data analysis in a critical way. Frequently, there are no unique solutions. 
-
-Case studies in each homework can be listed as your data science projects (e.g. on your CV) where you see fit. 
-
-
-## Objectives 
-
-- Get familiar with `R-studio` and `RMarkdown`
-- Hands-on R 
-- Learn data science essentials 
-    - gather data
-    - clean data
-    - summarize data 
-    - display data
-    - conclusion
-- Packages
-    - `dplyr`
-    - `ggplot`
-
 ##  Instructions
-
-- **Homework assignments can be done in a group consisting of up to three members**. Please find your group members as soon as possible and register your group on our Canvas site.
-
-- **All work submitted should be completed in the R Markdown format.** You can find a cheat sheet for R Markdown [here](https://posit.co/resources/cheatsheets/) For those who have never used it before, we urge you to start this homework as soon as possible. 
 
 - **Submit the following files, one submission for each group:**  (1) Rmd file, (2) a compiled  HTML or pdf version, and (3) all necessary data files if different from our source data. You may directly edit this .rmd file to add your answers. If you intend to work on the problems separately within your group, compile your answers into one Rmd file before submitting. We encourage that you at least attempt each problem by yourself before working with your teammates. Additionally, ensure that you can 'knit' or compile your Rmd file. It is also likely that you need to configure Rstudio to properly convert files to PDF. [**These instructions**](http://kbroman.org/knitr_knutshell/pages/latex.html#converting-knitrlatex-to-pdf) might be helpful.
 
 - In general, be as concise as possible while giving a fully complete answer to each question. All necessary datasets are available in this homework folder on Canvas. Make sure to document your code with comments (written on separate lines in a code chunk using a hashtag `#` before the comment) so the teaching fellows can follow along. R Markdown is particularly useful because it follows a 'stream of consciousness' approach: as you write code in a code chunk, make sure to explain what you are doing outside of the chunk. 
 
-- A few good or solicited submissions will be used as sample solutions. When those are released, make sure to compare your answers and understand the solutions.
-
-**Use of Generative AI (GAI)**
-
-Generative AI tools (e.g., ChatGPT, Copilot) are permitted for homework assignments and the final project. However, GAI may be used only as an assistant, not as a substitute for your own understanding or work. Students are expected to fully understand, verify, and be able to explain every step of their analysis, including data preparation, exploratory analysis, modeling choices, code, and interpretation of results. In particular, students must be able to write, modify, and debug all code on their own. Reliance on GAI-generated code without understanding is not acceptable. You are fully responsible for the correctness, clarity, and integrity of your submission, regardless of whether GAI was used.
-
-
-
-
-
-## Review materials
-
-- Study Basic R Tutorial
-- Study Advanced R Tutorial (to include `dplyr` and `ggplot`)
-- Study lecture 1: Data Acquisition and EDA
-
-
 # Case study 1: Audience Size
-
-How successful was the Wharton Talk Show **Business Radio Powered by the Wharton School**
-
 
 **Background:** Have you ever listened to [SiriusXM](https://www.siriusxm.com/)? Do you know there was a **Talk Show** run by Wharton professors in Sirius Radio?  Wharton launched a talk show called **Business Radio Powered by the Wharton School** through the Sirius Radio station in January of 2014. Within a short period of time the general reaction seemed to be overwhelmingly positive. The school would like to **estimate the audience size** in May, 2014. There were 51.6 million Sirius Radio listeners then. One approach is to estimate the proportion of the Wharton listeners to that of the Sirius listeners, $p$, so that we will come up with an audience size estimate of approximately 51.6 million times $p$. 
 
@@ -100,56 +53,28 @@ To do so, we launched a survey via Amazon Mechanical Turk ([MTurk](https://www.m
 
 We requested that only people in United States answer the questions. Each person can only fill in the questionnaire once to avoid duplicates. Aside from these restrictions, we opened the survey to everyone in MTurk with a hope that the sample would be more randomly chosen. 
 
-The raw data is stored as `Survey_results_final.csv` on Canvas.
-
 ## Data preparation
-
-1. We need to clean and select only the variables of interest. 
-
-Select only the variables Age, Gender, Education Level, Household Income in 2013, Sirius Listener?, Wharton Listener? and Time used to finish the survey.
-
-Change the variable names to be "age", "gender", "education", "income", "sirius", "wharton", "worktime".
-
 ```{r}
+# Reading in the csv file.
 survey <- suppressWarnings(
-  readr::read_csv(
-    "data/Survey_results_final.csv",
-    col_types = readr::cols(.default = readr::col_character()),
-    show_col_types = FALSE
-  )
-)
+          readr::read_csv("data/Survey_results_final.csv", col_types = readr::cols(.default = readr::col_character()), show_col_types = FALSE))
 
+# Selecting columns
 survey <- survey %>%
-  select(
-    `Answer.Age`,
-    `Answer.Gender`,
-    `Answer.Education`,
-    `Answer.HouseHoldIncome`,
-    `Answer.Sirius Radio`,
-    `Answer.Wharton Radio`,
-    WorkTimeInSeconds
-  )
+  select(`Answer.Age`, `Answer.Gender`, `Answer.Education`, `Answer.HouseHoldIncome`, `Answer.Sirius Radio`, `Answer.Wharton Radio`, WorkTimeInSeconds)
 
+# Renaming columns
 survey <- survey %>%
-  rename(
-    age      = `Answer.Age`,
-    gender   = `Answer.Gender`,
-    education= `Answer.Education`,
-    income   = `Answer.HouseHoldIncome`,
-    sirius   = `Answer.Sirius Radio`,
-    wharton  = `Answer.Wharton Radio`,
-    worktime = WorkTimeInSeconds
-  )
+  rename(age = `Answer.Age`, gender = `Answer.Gender`, education = `Answer.Education`, 
+         income = `Answer.HouseHoldIncome`, sirius = `Answer.Sirius Radio`, 
+         wharton  = `Answer.Wharton Radio`, worktime = WorkTimeInSeconds)
 
 ```
 
-2. Handle missing/wrongly filled values of the selected variables
-
-As in real world data with user input, the data is incomplete, with missing values, and has incorrect responses. There is no general rule for dealing with these problems beyond “use common sense.” In whatever case, explain what the problems were and how you addressed them. Be sure to explain your rationale for your chosen methods of handling issues with the data. Do not use Excel for this, however tempting it might be.
-
-Tip: Reflect on the reasons for which data could be wrong or missing. How would you address each case? For this homework, if you are trying to predict missing values with regression, you are definitely overthinking. Keep it simple.
+### Handling missing/wrongly filled values of the selected variables
 
 ```{r}
+# Finding missing values.
 colSums(is.na(survey))
 survey %>% filter(if_any(everything(), is.na))
 survey %>% filter(trimws(tolower(education)) == "select one")
@@ -160,7 +85,6 @@ survey <- survey %>% filter(!is.na(age))
 # Changing "select one" entries to "Other"
 survey <- survey %>% mutate(education = if_else(tolower(trimws(education)) == "select one", "Other", education))
 
-
 # Setting NA entries of sirius and wharton to no.
 survey <- survey %>%
   mutate(
@@ -168,39 +92,31 @@ survey <- survey %>%
     wharton = if_else(is.na(wharton), "No", wharton)
   )
 
-# Setting NA entries of gender to not specified
-survey <- survey %>%
-  mutate(
-    gender  = if_else(is.na(gender), "Not specified", sirius),
-  )
-
-# Setting NA entries of income to $0.
-survey <- survey %>%
-  mutate(
-    income  = if_else(is.na(income), "$0", sirius),
-  )
-
 colSums(is.na(survey))
-
 ```
 
+The first table shows entries that have an NA value and the second table shows entries which have "select one" as the education type.
+
+
 It is evident that there are a mix of different attributes which are missing. 
-Age: There is one entry with no age. That row will be invalidated, as all people have ages. 
-Gender: There are a couple entries with no gender. Looking at the data manually, the only other genders are Male and Female. People may identify with different genders, explaining the NA entries.
-Education: No entries are NA, however there were 19 entries that had "select one". These entries have been renamed to "Other".
-Income: NA income entries are be interpreted as the survey participant being unemployed.
-Sirius / Wharton: NA entries will be treated as false.
 
 
-3. Brief summary 
+1. Age: There is one entry with no age. That row will be invalidated, as all people have ages. 
 
-Write a brief report to summarize all the variables collected. Include both summary statistics (including sample size) and graphical displays such as histograms or bar charts where appropriate. Comment on what you have found from this sample. (For example - it's very interesting to think about why would one work for a job that pays only 10cents/each survey? Who are those survey workers? The answer may be interesting even if it may not directly relate to our goal.)
+2. Gender: There are a couple entries with no gender. Looking at the data manually, the only other genders are Male and Female. People may identify with different genders, explaining the NA entries.
 
+3. Education: No entries are NA, however there were 19 entries that had "select one". These entries have been renamed to "Other".
+
+4. Income: NA income entries are be interpreted as the survey participant being unemployed.
+
+5. Sirius / Wharton: NA entries will be treated as false.
+
+
+## Brief summary 
+
+We will first observe the level of education and income for the survey participants.
 ```{r}
-
-survey %>% count(sirius)
-survey %>% count(wharton)
-
+# Count of the number of people by education level.
 survey %>%
   count(education) %>%
   ggplot(aes(x = education, y = n, fill = education)) +
@@ -208,11 +124,115 @@ survey %>%
   theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
   guides(fill = "none")
 
+# Count of the number of people by income.
+survey %>%
+  count(income) %>%
+  ggplot(aes(x = income, y = n, fill = income)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  guides(fill = "none")
+```
+
+The majority of survey takers (744 people) have some college experience, or an Associate's degree. The second most common education level is a Bachelors / Other 4 Year degree, with 614 entries. 
+
+Most survey takers (429) had an income in the range of $30,000 - $50,000. The bulk of the participants have incomes within $15,000 - $75,000, with very few outside of that range (<$15k, 208), (>$150k, 47). Even though high-income respondents are rare, they are disproportionately more likely to listen to Wharton Radio.
+
+### Listen Rate vs Age
+
+```{r}
+survey <- survey %>%
+  mutate(
+    age_num = suppressWarnings(as.numeric(trimws(age)))
+  )
+
+# Plot of the Wharton listen rate as a function of age.
+survey <- survey %>%
+          mutate(age_bin = cut(age_num, breaks = seq(18, 80, 10), right = FALSE, include.lowest = TRUE))
+
+survey %>% 
+      filter(!is.na(age_bin)) %>%
+      count(age_bin, wharton) %>%
+      group_by(age_bin) %>%
+      mutate(rate = n / sum(n)) %>%
+      filter(wharton == "Yes") %>%
+      ggplot(aes(x = age_bin, y = rate, group = 1)) +
+      geom_point() +
+      geom_line() +
+      labs(title = "Wharton Listen Rate vs Age", x = "Age (binned)", y = "Wharton listen rate")
+
+# Plot of the Sirius listen rate as a function of age. 
+survey %>%
+      filter(!is.na(age_bin)) %>%
+      count(age_bin, sirius) %>%
+      group_by(age_bin) %>%
+      mutate(rate = n / sum(n)) %>%
+      filter(sirius == "Yes") %>%
+      ggplot(aes(x = age_bin, y = rate, group = 1)) +
+      geom_point() +
+      geom_line() +
+      labs(title = "Sirius Listen Rate vs Age", x = "Age (binned)", y = "Sirius listen rate")
+```
+
+The listening rate of the two radio stations as a function of age was graphed. The listening rates on average were substantially lower for Wharton compared to Sirius. Additionally, there were no survey takers in the age range of 58-68 who listened to the Wharton talk show. 
+
+There was a significant rise in listening rates for participants ages 68-78 for the Wharton talk show compared to younger participants. The overall trend for the Wharton talk show suggests an increase in listen rate as age increases. The sirius listen rate has the opposite relationship, with the listening rate peaking for ages 28-38 with a listening rate of almost 82.5%, before dropping by a substantial amount as age increases, down to around a 57% listen rate for ages 58-68, before increasing marginally to 60% for ages 68-78.
 
 
 
+### Listen Rate vs Income
+
+```{r}
+survey <- survey %>%
+  mutate(
+    income = if_else(is.na(income), "NA", income)
+  )
+
+income_order <- c(
+  "NA",
+  "Less than $15,000",
+  "$15,000 - $30,000",
+  "$30,000 - $50,000",
+  "$50,000 - $75,000",
+  "$75,000 - $150,000",
+  "Above $150,000"
+)
+
+survey <- survey %>%
+  mutate(
+    income = factor(income, levels = income_order, ordered = TRUE)
+  )
+
+survey %>%
+  count(income, wharton) %>%
+  group_by(income) %>%
+  mutate(rate = n / sum(n)) %>%
+  filter(wharton == "Yes") %>%
+  ggplot(aes(x = income, y = rate, group = 1)) +
+  geom_point() +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Wharton Listen Rate vs Income", y = "Wharton listen rate")
+
+survey %>%
+  count(income, sirius) %>%
+  group_by(income) %>%
+  mutate(rate = n / sum(n)) %>%
+  filter(sirius == "Yes") %>%
+  ggplot(aes(x = income, y = rate, group = 1)) +
+  geom_point() +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(title = "Sirius Listen Rate vs Income", y = "Sirius listen rate")
 
 ```
+
+Plotting the listen rate as a function of income shows additional insights. For the Wharton talk show, we can see that as income increases, the listen rate increases as well. Participants with income below $50,000 all have similar listening rates, around 3-3.5%. 
+
+Sirius listening rates show a more consistent rise as income increases, however at the high income levels (>$150,000), the listening rates drop by around 10%, a significant margin. 
+
+### Addressing Why Individuals Take Survey Despite Low Compensation
+
+When observing the sample data, we can see that there was a variety of income levels listed despite the monetary compensation for the survey being on 10 cents. Despite this small compensation, a number of respondents report relatively high household incomes. This does not necessarily imply that these individuals rely on these surveys as a primary source of income, but they may rather complete them out of curiosity, habit, or leisure, when the opportunity cost of a short task is negligible. Additionally, reported household income may reflect shared income within a household rather than the respondent’s personal earnings. 
 
 
 ## Sample properties
@@ -222,16 +242,105 @@ The population from which the sample is drawn determines where the results of ou
 1. Does this sample appear to be a random sample from the general population of the USA? Why it is crucial to have randomness here?
 
 ```{r}
+total <- nrow(survey)
 
+survey %>% count(income) %>% mutate(percent = 100 * n / sum(n))
+survey %>% count(gender) %>% mutate(percent = 100 * n / sum(n))
+
+survey <- survey %>%
+  mutate(
+    age_num = suppressWarnings(as.numeric(trimws(age)))
+  )
+
+survey <- survey %>%
+  mutate(
+    age_bin = cut(
+      age_num,
+      breaks = seq(18, 80, 10),
+      right = FALSE,
+      include.lowest = TRUE
+    )
+  )
+
+survey %>%
+  filter(!is.na(age_bin)) %>%
+  count(age_bin) %>%
+  mutate(
+    percent = 100 * n / sum(n)
+  )
 
 ```
 
+We will cover the distribution of income first.
+
+![Distribution of US Household Income 2014, United States Census](income_dist_2014.png)
+
+Comparing the percentage distributions of income, we observe the following:
+
+1. Income levels up to \$75,000 are over-represented:
+   - Under \$15,000: 11.8\% vs 9.1\% (U.S. population)
+   - \$15,000--\$50,000: 45.176\% vs 28.5\% (U.S. population)
+   - \$50,000--\$75,000: 21.396\% vs 15.9\% (U.S. population)
+
+2. Income levels above \$75,000 are under-represented:
+   - \$75,000--\$150,000: 18.672\% vs 27.9\% (U.S. population)
+   - Above \$150,000: 2.667\% vs 18.8\% (U.S. population)
+
+Overall, higher-income households are substantially under-represented in the survey sample, while lower-income households (below \$75,000) are over-represented relative to the U.S. population.
+
+Now analyzing gender, there were 744 Females and 1012 Males. Males represent 57.435% of the survey population, which is a slight over-representation compared to the US average of 51%.
+
+The younger generation is over-represented, while the older generation is under-represented. This is likely attributed to the familiarity of technology to different age groups.
+
+1. Individuals aged between 18-38 are over-represented.
+   - 18--28: 48.719% vs 13.5% (reality)
+   - 28--38: 32.285% vs 14.1% (reality)
+2. Individuals aged between 38-78 are under-represented.
+   - 38--48: 10.586% vs 13.1% (reality)
+   - 48--58: 5.919% vs 12.2% (reality)
+   - 58--68: 2.106% vs 12.1% (reality)
+   - 68--78: 0.285% vs 9.2% (reality)
+(Data was taken from US census data, 2014)
+
+Hence, it is evident that we have a slightly skewed sample of the US population, which may not accurately represent the true listening rates of the radios.
+
+
 2. Does this sample appear to be a random sample from the MTURK population?
 
+Analysing income distribution of MTurk Users:
+![Income Distribution of MTurk Users](Mturk_Income_Dist.png)
 
+The survey data represents the middle income range fairly well, however it over-represents lower income levels and under-represents higher income levels. 
 
+**Under \$30k**: 31.8% vs 24.58% (MTurk) - Over-represented
 
-Note: You can not provide evidence by simply looking at our data here. For example, you need to find distribution of education in our age group in US to see if the two groups match in distribution. You may need to gather some background information about the MTURK population to have a slight sense if this particular sample seem to a random sample from there... Please do not spend too much time gathering evidence. 
+**\$30k - \$50k**: 24.3% vs 21.02% (MTurk) - Slightly over-represented
+
+**\$50k - $150k**: 40.1% vs 48.65 (MTurk) - Under-represented
+
+**Above \$150k**: 2.67% vs 4.92% (MTurk) - Slightly under-represented.
+
+![Age Distribution of MTurk Users](Mturk_Age_Dist.png)
+
+The survey data broadly reflects the age structure of the MTurk population, but it substantially over-represents younger respondents and under-represents older respondents.
+
+- **Ages 18–29:**  
+  48.7% (survey) vs 29.7% (MTurk) — **Highly over-represented**
+
+- **Ages 30–39:**  
+  32.4% (survey) vs 36.8% (MTurk) — **Slightly under-represented**
+
+- **Ages 40–49:**  
+  10.6% (survey) vs 16.8% (MTurk) — **Under-represented**
+
+- **Ages 50–59:**  
+  5.9% (survey) vs 10.7% (MTurk) — **Under-represented**
+
+- **Ages 60 and above:**  
+  2.4% (survey) vs approximately 16.7% (MTurk) — **Highly under-represented**
+
+Overall, the survey sample is noticeably younger than the MTurk population. Nearly half of respondents fall in the youngest age group, while older age groups—particularly those above age 60 are under represented. This suggests that, although the sample is drawn from MTurk, age-related selection effects may influence the estimated listening behavior.
+
 
 ## Final estimate
 
@@ -239,9 +348,49 @@ Provide an approximate **95\% confidence interval** of the Wharton audience size
 
 
 1. Goal of the study
+
+The goal of this study was to estimate the audience size of Business Radio Powered by the Wharton School in May 2014, based on survey data collected from U.S. based respondents.
+
 2. Method used: data gathering, estimation methods
+
+```{r}
+# Restricting sample to sirius listeners.
+sirius_sample <- survey %>% filter(sirius == "Yes")
+
+n <- nrow(sirius_sample)
+x <- sum(sirius_sample$wharton == "Yes")
+
+p_hat <- x / n
+
+# Estimating the proportion of wharton listeners to sirius
+p_hat
+
+# Computing standard deviation
+sd <- sqrt(p_hat * (1 - p_hat) / n)
+
+# Using empirical rule to derive 95% confidence interval.
+ci_p <- c(
+  p_hat - 1.96 * sd,
+  p_hat + 1.96 * sd
+)
+
+ci_p
+
+# Scaling to true audience size.
+audience_ci <- 51.6e6 * ci_p
+audience_est <- 51.6e6 * p_hat
+
+audience_ci
+audience_est
+```
 3. Findings
+
+Wharton listeners represent about 5% of the MTurk Population. The estimated Wharton Business Radio audience size is approximately 2.6 million listeners, with a 95% confidence interval ranging from 2.0 million to 3.2 million listeners.
+
+
 4. Limitations of the study. 
+
+This estimate relies on the assumption that the Mechanical Turk sample is representative of the Sirius listener population with respect to Wharton listening behavior. However, earlier analyses show that the sample differs from the general U.S. population in age, income, and gender, and MTurk workers may exhibit systematic differences in media consumption. As a result, while the confidence interval captures some of the sampling variability, it does not account for potential selection bias, population distribution and hence, the true audience size may lie outside the reported range.
 
 
 ## New task
@@ -257,7 +406,6 @@ Please fill in the google form to list your platform where surveys will be launc
 
 
 A good proposal will give an accurate estimation with the least amount of money used. 
-
 
 
 
@@ -305,8 +453,7 @@ summary(w_data)
 #### Any missing values?
 
 ```{r}
-colSums(is.na(w_data)
-        )
+colSums(is.na(w_data))
 ```
 
 ### Write a summary describing the data set provided here. 
@@ -329,8 +476,7 @@ There are 10 degree types: Agricultural Sciences; Biological Sciences; Computer 
 #### How many year's statistics are being reported here? 
 
 ```{r}
-length(unique(w_data$Field)
-       )
+length(unique(w_data$Field))
 ```
 
 10 years of statistic are being reports (2006 - 2016).
@@ -503,65 +649,166 @@ Here are the datasets:
 
 Feel free to use either dataset to address the problems. 
 
+## Loading Data
+``` {r, echo = TRUE} 
+pay_data <- read_csv("data/MLPayData_Total.csv")
+team_data <- read_csv("data/Baseball.csv")
+```
+
 ## EDA: Relationship between payroll changes and performance
 
 Payroll may relate to performance among ML Baseball teams. One possible argument is that what affects this year's performance is not this year's payroll, but the amount that payroll increased from last year. Let us look into this through EDA. 
 
 Create increment in payroll
 
-a). To describe the increment of payroll in each year there are several possible approaches. Take 2013 as an example:
+# 4.1 - Relationship between payroll changes and performance
 
-    - option 1: diff: payroll_2013 - payroll_2012
-    - option 2: log diff: log(payroll_2013) - log(payroll_2012)
+a). To describe the increment of payroll in each year there are several possible approaches. Take 2013 as an example:
 
 Explain why the log difference is more appropriate in this setup.
 
+In describing the increment of payroll in each year, there are several possible approaches. While one approach is to take the difference in payroll between year $x$ and year $x - 1$, another approach is to take $log(x) - log(x - 1)$. The second approach is objectively better as it calculates the percentage change year on year instead of giving an absolute number change. This helps provide a more informative view towards the scale of the payroll increments year on year. Furthermore, a clean property of using the log measure to calculate percentage changes is that in contrast to the typical approach, it maintains symmetry of percentage changes where the percentage increase from $a$ to $b$ is equal to the percentage decrease from $b$ to $a$. 
+
+
 b). Create a new variable `diff_log=log(payroll_2013) - log(payroll_2012)`. Hint: use `dplyr::lag()` function.
+
+## Part b)
+``` {r, echo = TRUE}
+diff_log <- team_data %>%
+  filter(year %in% c(2012, 2013)) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(diff_log = log(payroll) - lag(log(payroll)))
+
+head(diff_log)
+
+```
 
 c). Create a long data table including: team, year, diff_log, win_pct
 
+``` {r, echo = TRUE}
+team_data <- team_data %>% 
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(diff_log = log(payroll) - lag(log(payroll)))
 
-## Exploratory questions
-
-a). Which five teams had highest increase in their payroll between years 2010 and 2014, inclusive?
-
-b). Between 2010 and 2014, inclusive, which team(s) "improved" the most? That is, had the biggest percentage gain in wins?
+head(team_data)
+```
 
 
-## Do log increases in payroll imply better performance? 
+# 4.2 - Exploratory Questions
+
+## Part a) Which five teams had highest increase in their payroll between years 2010 and 2014, inclusive?
+
+``` {r, echo = TRUE}
+years_of_interest <- c(2010, 2011, 2012, 2013, 2014)
+
+payroll_increase <- team_data %>%
+  filter(year %in% years_of_interest) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(increase = log(payroll) - lag(log(payroll), 4)) %>%
+  filter(year == 2014) %>%
+  ungroup() %>%
+  arrange(desc(increase)) %>%
+  slice_head(n = 5)
+
+head(payroll_increase)
+```
+
+
+## Part b) Between 2010 and 2014, inclusive, which team(s) "improved" the most? That is, had the biggest percentage gain in wins?
+``` {r, echo = TRUE}
+performance_increase <- team_data %>%
+  filter(year %in% years_of_interest) %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(per_increase = win_pct - lag(win_pct, 4)) %>%
+  filter(year == 2014) %>%
+  arrange(desc(per_increase)) %>%
+  ungroup()
+
+head(performance_increase)
+```
+
+# 4.3 Do log increases in payroll imply better performance?
 
 Is there evidence to support the hypothesis that higher increases in payroll on the log scale lead to increased performance?
 
 Pick up a few statistics, accompanied with some data visualization, to support your answer. 
 
+``` {r, echo = TRUE}
+performance_to_payroll <- team_data %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(pay_delta = log(payroll) - lag(log(payroll))) %>%
+  mutate(performance_delta = win_pct - lag(win_pct)) %>%
+  drop_na() %>%
+  ungroup()
+
+total_performance_to_payroll <- team_data %>%
+  group_by(team) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(pay_delta = log(payroll) - lag(log(payroll), 16)) %>%
+  mutate(performance_delta = win_pct - lag(win_pct, 16)) %>%
+  drop_na() %>%
+  ungroup()
+```
+
+``` {r, echo = TRUE}
+ggplot(performance_to_payroll, aes(x = pay_delta, y = performance_delta)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Log payroll change (year on year)",
+    y = "Win percentage change (year on year)",
+    title = "Payroll growth vs team performance"
+  )
+```
+``` {r, echo = TRUE}
+ggplot(total_performance_to_payroll, aes(x = pay_delta, y = performance_delta)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Log payroll change",
+    y = "Win percentage change",
+    title = "Payroll growth vs team performance across total period"
+  )
+```
+``` {r, echo = TRUE}
+cor(performance_to_payroll$pay_delta,
+    performance_to_payroll$performance_delta)
+
+model <- lm(performance_delta ~ pay_delta,
+            data = performance_to_payroll)
+
+summary(model)
+```
+From the data provided above, we can see that there is very little correlation between log payroll increases and petter team performance. In the graphs, we can observe that while the slope is positive, it is extremely small, indicating a very weak linear relationship. This is further supported by the correlation value of **0.0377** which is close to 0 or no correlation. Furthermore, the low $R^2$ value of **0.00142** indicates that payroll changes explain only 0.14% of the variation in performance changes, meaning that this model has almost no explanatory power. Therefore, we can conclude that log payroll increases do not lead to better team performance.
+
+
 ## Comparison
+# 4.4 - Comparison
+``` {r, echo = TRUE}
 
-Which set of factors are better explaining performance? Yearly payroll or yearly increase in payroll? What criterion is being used? 
+model_one <- lm(win_pct ~ pay_delta,
+            data = performance_to_payroll)
 
-## Using GAI to go one step beyond EDA
+model_two <- lm(win_pct ~ log(payroll),
+            data = performance_to_payroll)
 
-You are encouraged to use Generative AI (GAI) (e.g., ChatGPT, Copilot) as an assistant for this question.
+summary(model_one)
+summary(model_two)
 
-Using the payroll and performance data, ask a GAI tool to suggest a reasonable way to study the relationship between payroll and team performance beyond simple plots, building on what we learned from EDA.
+```
+From the summaries attained above, we can observe that model one (using yearly increases in payroll) has an $R^2$ value of **0.0703** and that model two (using yearly payroll) has an $R^2$ value of 0.0664. As such, we can see that model 1 has more explanatory power given that the model accounts for more of the variance. However, the difference between the two values is very small so while yearly increase in payroll would serve as a slightly better measure, the difference is very small and the two models have similar explanatory power. 
 
-Briefly address the following:
+# 4.5 - Going beyond EDA
 
-+ Process
-How did you use GAI to guide your analysis? What steps did you follow after EDA?
+Going forward, a more reasonable way to study the relationship between payroll and team performance beyond simple plots would be by using linear regression alongside more statistical analysis including the $R^2$ value, model comparisons and slope tests. 
 
-+ What makes the analysis better than basic EDA?
-Explain what criteria you used to judge that this approach is an improvement (e.g., uses more information, reduces misleading aggregation, clearer comparison).
+Process: In performing my analysis, GAI, particularly the Chat-GPT model, guided my analysis by suggesting further methods of testing the relationships between the given variables, in particular linear regression and interpreting the $R^2$ value. As such, I incorporated such features into my analysis and drew upon their data in reaching a conclusion for the previous questions. 
 
-+ Conclusion
-What do you learn about the relationship between payroll and performance? What are the limits of this conclusion?
+These methods are better than the basic EDA methods as it uses formal statistical models rather than just relying on visual patterns. Furthermore, it quantifies relationships using measures such as correlations allowing for direct comparison of measures such as payrolls or increasing payrolls. Furthermore, it reduces the risk of formulating incorrect conclusions because of noisy scatter plots or other visual factors. 
 
-Notes:
-
-+ GAI may only be used as an assistant.
-+ You must understand and be able to explain all code and results you include.
-+ There is no single correct answer; clarity and reasoning matter more than sophistication.
-
-
-
-
-
+In conclusion, from the above analysis, we can conclude that there is a very weak relationship between payroll and performance. Payroll increases have shown very little correlation with performance increases and regression tests have shown that very little of the variability in performance can be attributed to payroll data. The limitations of this conclusion lie in the simplicity of the model which fails to consider the influence of other factors in determining a relationship between payroll and performance. Furthermore, only a linear model was used and as such, we were unable to test for other types of non-linear relationships.

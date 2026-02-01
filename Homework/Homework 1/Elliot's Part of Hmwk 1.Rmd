@@ -1,0 +1,262 @@
+---
+title: " Modern Data Mining, HW 1"
+author:
+- Daniel Park
+- Elliot Banks
+- Wilson Zhang
+date: 'Due: 11:59PM,  Feb 1, 2026'
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = "hide", fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+# check if you have ISLR package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(ISLR, readxl, tidyverse, magrittr, dplyr, ggplot2)
+```
+
+# Case study 2: Women in Science
+
+Are women underrepresented in science in general? How does gender relate to the type of educational degree pursued? Does the number of higher degrees increase over the years? In an attempt to answer these questions, we assembled a data set (`WomenData_06_16.xlsx`) from [NSF](https://ncses.nsf.gov/pubs/nsf19304/digest/field-of-degree-women) about various degrees granted in the U.S. from 2006 to 2016. It contains the following variables: Field (Non-science-engineering (`Non-S&E`) and sciences (`Computer sciences`, `Mathematics and statistics`, etc.)), Degree (`BS`, `MS`, `PhD`), Sex (`M`, `F`), Number of degrees granted, and Year.
+
+Our goal is to answer the above questions only through EDA (Exploratory Data Analyses) without formal testing. We have provided sample R-codes in the appendix to help you if needed. 
+
+## Data preparation  
+
+### Understand and clean the data
+
+Notice the data came in as an Excel file. We need to use the package `readxl` and the function `read_excel()` to read the data `WomenData_06_16.xlsx` into R. 
+
+#### Read the data into R.
+
+```{r}
+women_data <- read_excel("data/WomenData_06_16.xlsx")
+w_data <- women_data
+```
+
+#### Clean the names of each variables. (Change variable names to  `Field`,`Degree`, `Sex`, `Year` and `Number` )
+
+```{r}
+colnames(w_data)
+w_data <- w_data %>%
+  rename(`Field` = `Field and sex`,
+         `Number` = `Degrees Awarded`)
+colnames(w_data)
+```
+
+#### Set the variable natures properly. 
+
+```{r}
+w_data <- w_data %>%
+  mutate( Field = as.factor(Field),
+          Degree = as.factor(Degree),
+          Sex = as.factor(Sex)
+          )
+summary(w_data)
+```
+
+#### Any missing values?
+
+```{r}
+colSums(is.na(w_data)
+        )
+```
+
+### Write a summary describing the data set provided here. 
+
+#### How many fields are there in this data?
+
+```{r}
+dim(w_data)
+```
+
+There are 5 different variables (Field, Degree, Sex, Year and Number), and 660 data entries in the data set.
+
+#### What are the degree types?
+
+```{r}
+unique(w_data$Field)
+```
+There are 10 degree types: Agricultural Sciences; Biological Sciences; Computer Sciences; Earth, Atmospheric, and Ocean Sciences; Mathematics and Statistics; Physical Sciences; Psychology; Social Sciences; Engineering; and Non-S&E.
+
+#### How many year's statistics are being reported here? 
+
+```{r}
+length(unique(w_data$Field)
+       )
+```
+
+10 years of statistic are being reports (2006 - 2016).
+
+## BS degrees in 2015
+
+### Is there evidence that more males are in science-related fields vs `Non-S&E`? Provide summary statistics and a plot which shows the number of people by gender and by field. Write a brief summary to describe your findings.
+
+The number of males and females in S&E were relatively similar in 2015 with 327,122 and 322,935 people graduating respectively. This is visualised in the Bar Chart where the bars for Male and Female S&E Graduates is essentially the same. Furthermore, this shows that there are many more gradutes in non-S&E courses compared with S&E courses. However, this could be attributed to a limited range of degrees available in S&E courses compared with non-S&E courses.
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(SE, Sex) %>%
+  summarise(SE_number = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = SE, y = SE_number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  theme(axis.text.y = element_text(angle = 60)) +
+  labs(
+      title = "Number of Bachelor Graduates by Gender, Degree Type and Field (2015)",
+      x = "Field",
+      y = "Number of Graduates",
+      fill = "Gender"
+    )
+```
+
+```{r include=TRUE, results='asis', echo=FALSE}
+tab <- w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(SE, Sex) %>%
+  summarise(Total = sum(Number),
+            .groups = "drop")
+
+knitr::kable(tab, digits = 2, caption = "Summary statistics by S&E group and gender in 2015")
+```
+
+## EDA bringing type of degree, field and gender in 2015
+
+### Describe the number of people by type of degree, field, and gender. Do you see any evidence of gender effects over different types of degrees? Again, provide graphs to summarize your findings.
+
+The number of people pursuing courses in Bachelors and Masters degrees in 2015 is very unequal with around 1,500,000 and 700,000 graduating in Mathematics and Statistics respectively, compared with all of the other courses where graduates numbered less than around 200,000. This pattern is evident in PhD courses to a less extent, with around 30,000 people graduating in Mathematics and Statistics compared with less than 10,000 for the other subject areas.
+
+Females make up a larger proportion of graduates in Mathematics and Statistics as well as Physical Sciences across all three degree types. Conversely, Males comprise the most graduates in the subject area  Earth, Atmospheric and Ocean Sciences, with the remaining topics being relatively equally weighted in relation to gender.
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "BS") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Bachelor Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "MS") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Masters Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+```{r}
+w_data %>%
+  filter(Year == 2015, Degree == "PhD") %>%
+  ggplot(aes(x = Field, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of PhD Graduates by Gender and Field (2015)",
+    x = "Field",
+    y = "Number of Graduates",
+    fill = "Gender"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+## EDA bring all variables 
+
+### In this last portion of the EDA, we ask you to provide evidence numerically and graphically: Do the number of  degrees change by gender, field, and time? 
+
+Overtime, females have consistently had more graduates in subject areas including Agricultural Sciences, Biological Sciences, Non-S&E, Psychology and Social Sciences. This differs to Computer Science, Earth, Atmospheric and Ocean Sciences, Engineering, Mathematics and Statistics and Physical Sciences which have consistently more male graduates each year.
+
+All subject areas have experienced strong growth in graduate numbers, however, Earth, Atmospheric and Ocean Sciences, and Social Sciences have experienced slower growth in the past three years, with Social Sciences even falling in popularity.
+
+Finally, Agricultural Sciences and Earth, Atmospheric and Ocean Sciences initially had relatively equal numbers of male and femal graduates in 2006, however, both have diverged significantly over the 10 years. This has resulted in females studying Agricultural Sciences more and males studying Earth, Atmospheric and Ocean Sciences more.
+
+```{r}
+w_data %>%
+  group_by(Year, Field, Sex) %>%
+  summarise(total_degrees = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = Year, y = total_degrees, color = Sex)) +
+  geom_line() +
+  facet_wrap(~ Field, scales = "free_y") +
+  labs(
+    title = "Degrees Over Time by Gender and Field Group",
+    x = "Year",
+    y = "Number of Degrees",
+    color = "Gender"
+  ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+```
+
+
+## Women in Data Science
+
+### Finally, is there evidence showing that women are underrepresented in data science? Data science is an interdisciplinary field of computer science, math, and statistics. You may include year and/or degree.
+
+Yes, females have been underrepresented in data science consistently across the decade. Whilst the total number of females studying this subject area have increased from 10,000 to 12,000, they are still significantly less than the current 53,000 males gradutates, and have experienced much slower growth in popularity compared with the 15,000 increase in males.
+
+```{r}
+w_data %>%
+  filter(Field %in% c("Computer sciences", "Mathematics and statistics")) %>%
+  ggplot(aes(x = Year, y = Number, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Number of Graduates by Gender in Data Science",
+    x = "Year",
+    y = "Number of Graduates",
+    fill = "Gender"
+  )
+```
+
+## Final brief report
+
+### Summarize your findings focusing on answering the questions regarding if we see consistent patterns that more males pursue science-related fields. Any concerns with the data set? How could we improve on the study?
+
+Over the 10 year study, we consistently see males pursuing science-related fields more than females. Moreover, this gender gap has almost doubled over this time period.
+
+This study raised no issues about the integrity or quality of the data set. An addition could be considering individuals who study majors from different schooles (S&E and non-S&E). The reason for why females are underrepresented may be because they are not having their full degree structure reported in this study (e.g. someone could major in English and Chemistry in an Arts Degree - this would be shown as Non-S&E).
+
+To improve this study this experiment should be repeated numerous times, improving validity and reliability. Furthermore, it should be conducted across multiple universities in the same region, limiting the impact of potential bias from the current test population.
+
+```{r}
+  w_data %>%
+  mutate(SE = ifelse(Field!="Non-S&E" , "S&E", "Non-S&E")) %>%
+  group_by(Year, SE, Sex) %>%
+  summarise(SE_number = sum(Number), .groups = "drop") %>%
+  ggplot(aes(x = Year, y = SE_number, color = Sex)) +
+  geom_line() +
+  facet_wrap(~ SE, scales = "free_y") +
+  labs(
+    title = "Graduates Over Time by Gender: S&E vs Non-S&E",
+    x = "Year",
+    y = "Number of Graduates",
+    color = "Gender"
+  )
+```
