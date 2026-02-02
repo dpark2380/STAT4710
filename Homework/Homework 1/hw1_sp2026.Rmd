@@ -39,19 +39,7 @@ library(dplyr)
 
 \pagebreak
 
-##  Instructions
-
-- **Submit the following files, one submission for each group:**  (1) Rmd file, (2) a compiled  HTML or pdf version, and (3) all necessary data files if different from our source data. You may directly edit this .rmd file to add your answers. If you intend to work on the problems separately within your group, compile your answers into one Rmd file before submitting. We encourage that you at least attempt each problem by yourself before working with your teammates. Additionally, ensure that you can 'knit' or compile your Rmd file. It is also likely that you need to configure Rstudio to properly convert files to PDF. [**These instructions**](http://kbroman.org/knitr_knutshell/pages/latex.html#converting-knitrlatex-to-pdf) might be helpful.
-
-- In general, be as concise as possible while giving a fully complete answer to each question. All necessary datasets are available in this homework folder on Canvas. Make sure to document your code with comments (written on separate lines in a code chunk using a hashtag `#` before the comment) so the teaching fellows can follow along. R Markdown is particularly useful because it follows a 'stream of consciousness' approach: as you write code in a code chunk, make sure to explain what you are doing outside of the chunk. 
-
 # Case study 1: Audience Size
-
-**Background:** Have you ever listened to [SiriusXM](https://www.siriusxm.com/)? Do you know there was a **Talk Show** run by Wharton professors in Sirius Radio?  Wharton launched a talk show called **Business Radio Powered by the Wharton School** through the Sirius Radio station in January of 2014. Within a short period of time the general reaction seemed to be overwhelmingly positive. The school would like to **estimate the audience size** in May, 2014. There were 51.6 million Sirius Radio listeners then. One approach is to estimate the proportion of the Wharton listeners to that of the Sirius listeners, $p$, so that we will come up with an audience size estimate of approximately 51.6 million times $p$. 
-
-To do so, we launched a survey via Amazon Mechanical Turk ([MTurk](https://www.mturk.com/)) on May 24, 2014 at an offered price of \$0.10 for each answered survey.  We set it to be run for 6 days with a target maximum sample size of 2000 as our goal. Most of the observations came in within the first two days. The main questions of interest are "Have you ever listened to Sirius Radio" and "Have you ever listened to Sirius Business Radio by Wharton?" A few demographic features used as control variables were also collected; these include Gender, Age and Household Income.  
-
-We requested that only people in United States answer the questions. Each person can only fill in the questionnaire once to avoid duplicates. Aside from these restrictions, we opened the survey to everyone in MTurk with a hope that the sample would be more randomly chosen. 
 
 ## Data preparation
 ```{r}
@@ -96,7 +84,6 @@ colSums(is.na(survey))
 ```
 
 The first table shows entries that have an NA value and the second table shows entries which have "select one" as the education type.
-
 
 It is evident that there are a mix of different attributes which are missing. 
 
@@ -146,6 +133,8 @@ survey <- survey %>%
   )
 
 # Plot of the Wharton listen rate as a function of age.
+
+## Grouping the ages into separate bins.
 survey <- survey %>%
           mutate(age_bin = cut(age_num, breaks = seq(18, 80, 10), right = FALSE, include.lowest = TRUE))
 
@@ -177,8 +166,6 @@ The listening rate of the two radio stations as a function of age was graphed. T
 
 There was a significant rise in listening rates for participants ages 68-78 for the Wharton talk show compared to younger participants. The overall trend for the Wharton talk show suggests an increase in listen rate as age increases. The sirius listen rate has the opposite relationship, with the listening rate peaking for ages 28-38 with a listening rate of almost 82.5%, before dropping by a substantial amount as age increases, down to around a 57% listen rate for ages 58-68, before increasing marginally to 60% for ages 68-78.
 
-
-
 ### Listen Rate vs Income
 
 ```{r}
@@ -187,6 +174,7 @@ survey <- survey %>%
     income = if_else(is.na(income), "NA", income)
   )
 
+# Selecting order in which to display income
 income_order <- c(
   "NA",
   "Less than $15,000",
@@ -202,6 +190,7 @@ survey <- survey %>%
     income = factor(income, levels = income_order, ordered = TRUE)
   )
 
+# Plotting listening rate as income increases for both platforms
 survey %>%
   count(income, wharton) %>%
   group_by(income) %>%
@@ -239,14 +228,16 @@ When observing the sample data, we can see that there was a variety of income le
 
 The population from which the sample is drawn determines where the results of our analysis can be applied or generalized. We include some basic demographic information for the purpose of identifying sample bias, if any exists. Combine our data and the general population distribution in age, gender and income to try to characterize our sample on hand.
 
-1. Does this sample appear to be a random sample from the general population of the USA? Why it is crucial to have randomness here?
+### Does this sample appear to be a random sample from the general population of the USA? Why it is crucial to have randomness here?
 
 ```{r}
 total <- nrow(survey)
 
+# Showing counts and proportions of income and gender.
 survey %>% count(income) %>% mutate(percent = 100 * n / sum(n))
 survey %>% count(gender) %>% mutate(percent = 100 * n / sum(n))
 
+# Binning ages again, finding counts and proportions
 survey <- survey %>%
   mutate(
     age_num = suppressWarnings(as.numeric(trimws(age)))
@@ -305,7 +296,7 @@ The younger generation is over-represented, while the older generation is under-
 Hence, it is evident that we have a slightly skewed sample of the US population, which may not accurately represent the true listening rates of the radios.
 
 
-2. Does this sample appear to be a random sample from the MTURK population?
+### Does this sample appear to be a random sample from the MTURK population?
 
 Analysing income distribution of MTurk Users:
 ![Income Distribution of MTurk Users](Mturk_Income_Dist.png)
@@ -324,22 +315,22 @@ The survey data represents the middle income range fairly well, however it over-
 
 The survey data broadly reflects the age structure of the MTurk population, but it substantially over-represents younger respondents and under-represents older respondents.
 
-- **Ages 18–29:**  
-  48.7% (survey) vs 29.7% (MTurk) — **Highly over-represented**
+- **Ages 18 - 29:**  
+  48.7% (survey) vs 29.7% (MTurk) - Highly over-represented
 
-- **Ages 30–39:**  
-  32.4% (survey) vs 36.8% (MTurk) — **Slightly under-represented**
+- **Ages 30 - 39:**  
+  32.4% (survey) vs 36.8% (MTurk) - Slightly under-represented
 
-- **Ages 40–49:**  
-  10.6% (survey) vs 16.8% (MTurk) — **Under-represented**
+- **Ages 40 - 49:**  
+  10.6% (survey) vs 16.8% (MTurk) - Under-represented
 
-- **Ages 50–59:**  
-  5.9% (survey) vs 10.7% (MTurk) — **Under-represented**
+- **Ages 50 - 59:**  
+  5.9% (survey) vs 10.7% (MTurk) - Under-represented
 
 - **Ages 60 and above:**  
-  2.4% (survey) vs approximately 16.7% (MTurk) — **Highly under-represented**
+  2.4% (survey) vs approximately 16.7% (MTurk) - Highly under-represented
 
-Overall, the survey sample is noticeably younger than the MTurk population. Nearly half of respondents fall in the youngest age group, while older age groups—particularly those above age 60 are under represented. This suggests that, although the sample is drawn from MTurk, age-related selection effects may influence the estimated listening behavior.
+Overall, the survey sample is noticeably younger than the MTurk population. Nearly half of respondents fall in the youngest age group, while older age groups-particularly those above age 60 are under represented. This suggests that, although the sample is drawn from MTurk, age-related selection effects may influence the estimated listening behavior.
 
 
 ## Final estimate
@@ -347,11 +338,11 @@ Overall, the survey sample is noticeably younger than the MTurk population. Near
 Provide an approximate **95\% confidence interval** of the Wharton audience size by May of 2014. Assume that the sample is a random sample of the MTURK population, and that the proportion of Wharton listeners vs. Sirius listeners in the general population is the same as that in the MTURK population. Write a brief executive summary to summarize your findings and how you came to that conclusion.
 
 
-1. Goal of the study
+### Goal of the study
 
 The goal of this study was to estimate the audience size of Business Radio Powered by the Wharton School in May 2014, based on survey data collected from U.S. based respondents.
 
-2. Method used: data gathering, estimation methods
+### Method used: data gathering, estimation methods
 
 ```{r}
 # Restricting sample to sirius listeners.
@@ -383,31 +374,87 @@ audience_est <- 51.6e6 * p_hat
 audience_ci
 audience_est
 ```
-3. Findings
+### Findings
 
 Wharton listeners represent about 5% of the MTurk Population. The estimated Wharton Business Radio audience size is approximately 2.6 million listeners, with a 95% confidence interval ranging from 2.0 million to 3.2 million listeners.
 
 
-4. Limitations of the study. 
+### Limitations of the study. 
 
 This estimate relies on the assumption that the Mechanical Turk sample is representative of the Sirius listener population with respect to Wharton listening behavior. However, earlier analyses show that the sample differs from the general U.S. population in age, income, and gender, and MTurk workers may exhibit systematic differences in media consumption. As a result, while the confidence interval captures some of the sampling variability, it does not account for potential selection bias, population distribution and hence, the true audience size may lie outside the reported range.
 
 
 ## New task
 
-Now suppose you are asked to design a study to estimate the audience size of Wharton Business Radio Show as of today: You are given a budget of $1000. You need to present your findings in two months. 
+### Proposal: Estimating the Current Audience Size of Wharton Business Radio (Budget: $1000, Timeline: 2 months)
 
-Write a proposal for this study which includes:
+#### 1) Method
+We will estimate the number of current listeners as follows:
 
-1. Method proposed to estimate the audience size.
-2. What data should be collected and where it should be sourced from. (Can we use ChatGPT to get us a rough estimate?)
+1. Collect U.S. adult samples to identify individuals who are SiriusXM listeners
 
-Please fill in the google form to list your platform where surveys will be launched and collected [HERE](https://forms.gle/8SmjFQ1tpqr6c4sa8) 
+2. Within the SiriusXM listener subset, estimate the proportion who have listened to Wharton Business Radio in the last 30 days.
+Let p be the estimated proportion of Wharton listeners among SiriusXM listeners. We will multiply p by a credible estimate of the **current SiriusXM listener/subscriber base** from public sources to obtain an estimated audience size. A 95% confidence interval will be computed using a standard CI for a proportion and scaled to the population size.
+
+#### 2) Data to collect and sources
+**Survey variables**
+
+- SiriusXM listening status (Yes/No, past 30 days)
+
+- Wharton Business Radio listening status (Yes/No, past 30 days)
+
+- Listening frequency (approximate minutes per week, past 30 days)
+
+- Medium of Listening (car radio, SiriusXM app, podcast replay, other)
+
+- Demographics for weighting: age, gender, education, household income, region/state
+
+**Collection of Data**
+
+We will use:
+
+- **Prolific** platform to collect data, a platform which "helps AI developers, researchers, and organizations easily access the highest-quality human data" (Prolific)
+
+- Publicly available estimates of **current SiriusXM subscriber/listener base** (For example, company reports/filings or reputable summaries).
+
+**Budgeting**
+The $1000 budget will be distributed as follows:
+
+- Participant incentives (~$850):
+  Used to recruit approximately 700–900 U.S.-based respondents on Prolific for a 5-7 minute survey. Incentive rates are set to meet platform minimums while ensuring response quality is sufficient.
+
+- Platform and service fees (~$100):  
+  Covers Prolific service fees and any additional costs associated with the collection of data.
+
+- Contingency and pilot testing (~$50):
+  Reserved for a small pilot survey to test question clarity and for additional responses if data quality issues arise.
+
+**Pros and Cons**
+
+Pros
+
+- Access to a high-quality, pre-screened participant pool with reliable demographic information
+
+- Better data quality and fewer bots or low-effort responses compared to MTurk
+
+- Ability to target U.S. respondents and apply demographic quotas, reducing sampling bias
+
+- Cost-effective for small to medium-sized academic studies within a limited budget
+
+Cons:
+
+- More expensive per response than MTurk, limiting maximum sample size
+
+- Still not fully representative of the general U.S. population, requiring weighting and careful interpretation
 
 
-A good proposal will give an accurate estimation with the least amount of money used. 
+**Use of ChatGPT**
 
+ChatGPT can assist with survey wording, analysis planning, and drafting of the reports, but it will not be used as an empirical source for audience size, as the data sources that it pulls cannot easily be verified, and ChatGPT can also hallucinate, providing incorrect modelling data. 
 
+**Final Deliverable**
+
+Point estimate + 95% CI for current audience size, as well as outlining the limitations of the data collected in relation to several factors, such as potential selection bias arising from the survey platform, and uncertainty in extrapolating survey proportions to the broader listening population. 
 
 
 # Case study 2: Women in Science
