@@ -1,0 +1,178 @@
+---
+title: "Modern Data Mining, HW 2"
+author:
+- Daniel Park
+- Elliot Banks
+- Wilson Zhang
+date: 'Due: 11:59 PM,  Sunday, 02/22'
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+# check if you have ISLR package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(ISLR, tidyverse, data.table) # add the packages needed!!!
+```
+
+
+\pagebreak
+
+# Overview {-}
+
+Principle Component Analysis is widely used in data exploration, dimension reduction, data visualization. The aim is to transform original data into uncorrelated linear combinations of the original data while keeping the information contained in the data. High dimensional data tends to show clusters in lower dimensional view. 
+
+Clustering Analysis is another form of EDA. Here we are hoping to group data points which are close to each other within the groups and far away between different groups. Clustering using PC's can be effective. Clustering analysis can be very subjective in the way we need to summarize the properties within each group. 
+
+Both PCA and Clustering Analysis are so called unsupervised learning. There is no response variables involved in the process. 
+
+For supervised learning, we try to find out how does a set of predictors relate to some response variable of the interest. Multiple regression is still by far, one of the most popular methods. We use a linear model as a working model for its simplicity and interpretability. It is important that we use domain knowledge as much as we can to determine the form of the response as well as the function format of the factors on the other hand. 
+
+## Objectives
+
+- PCA
+- SVD
+- Clustering Analysis
+- Linear Regression
+
+## Review materials
+
+- Study Module 2: PCA
+- Study Module 3: Clustering Analysis
+- Study Module 4: Multiple regression (Including Simple regression as well)
+
+## Data needed
+
+- `NLSY79.csv`
+- `brca_subtype.csv`
+- `brca_x_patient.csv`
+
+# Case Study 3: Fuel Efficiency in Automobiles
+
+What determines how fuel efficient a car is? Are Japanese cars more fuel efficient?  To answer thes questions we will build various linear models  using 
+ the `Auto` dataset from the book `ISLR`. The original dataset contains information for about 400 different cars built in various years.  To get the data, first install the package ISLR which has been done in the first R-chunk.  The `Auto` dataset should be loaded automatically.  Original data source is here: https://archive.ics.uci.edu/ml/datasets/auto+mpg
+
+Get familiar with this dataset first. Tip: you can use the command `?ISLR::Auto` to view a description of the dataset. Our response variable will me `MPG`: miles per gallon.
+
+## EDA
+
+
+```{r}
+# auto <- ISLR::Auto
+# ?ISLR::Auto
+# summary(auto) 
+# hist(auto$acceleration) # to check if there are some outliers
+```
+a) Explore the data, list the variables with clear definitions. Set each variable with its appropriate class. For example `origin` should be set as a factor. 
+
+b) How many cars are included in this data set? 
+
+c) EDA, focus on pairwise plots and summary statistics. Briefly summarize your findings and any peculiarities in the data.
+
+
+## What effect does `time` have on `MPG`?
+
+a) Start with a simple regression of `mpg` vs. `year` and report R's `summary` output. Is `year` a significant variable at the .05 level? State what effect `year` has on `mpg`, if any, according to this model. 
+
+b) Add `horsepower` on top of the variable `year` to your linear model. Is `year` still a significant variable at the .05 level? Give a precise interpretation of the `year`'s effect found here. 
+
+c) The two 95% CI's for the coefficient of year differ among (a) and (b). How would you explain the difference to a non-statistician?
+
+d) Create a model with interaction by fitting `lm(mpg ~ year * horsepower)`. Is the interaction effect significant at .05 level? Explain the year effect (if any). 
+
+## Categorical predictors
+
+Remember that the same variable can play different roles! Take a quick look at the variable `cylinders`, and try to use this variable in the following analyses wisely. We all agree that a larger number of cylinders will lower mpg. However, we can interpret `cylinders` as either a continuous (numeric) variable or a categorical variable.
+
+a) Fit a model that treats `cylinders` as a continuous/numeric variable. Is `cylinders` significant at the 0.01 level? What effect does `cylinders` play in this model?
+
+b) Fit a model that treats `cylinders` as a categorical/factor. Is `cylinders` significant at the .01 level? What is the effect of `cylinders` in this model? Describe the `cylinders` effect over `mpg`. 
+
+c) What are the fundamental differences between treating `cylinders` as a continuous and categorical variable in your models? 
+
+d) Can you test the null hypothesis: fit0: `mpg` is linear in `cylinders` vs. fit1: `mpg` relates to `cylinders` as a categorical variable at .01 level?  
+
+
+## Results
+
+Final modeling question: we want to explore the effects of each feature as best as possible. You may explore interactions, feature transformations, higher order terms, or other strategies within reason. The model(s) should be as parsimonious (simple) as possible unless the gain in accuracy is significant from your point of view.
+  
+a) Describe the final model. Include diagnostic plots with particular focus on the model residuals and diagnoses.
+
+b) Summarize the effects found.
+
+c) Predict the `mpg` of the following car: A red car built in the US in 1983 that is 180 inches long, has eight cylinders, displaces 350 cu. inches, weighs 4000 pounds, and has a horsepower of 260. Also give a 95% CI for your prediction.
+
+
+# Simple Regression through simulations 
+    
+## Linear model through simulations
+
+This exercise is designed to help you understand the linear model using simulations. In this exercise, we will generate $(x_i, y_i)$ pairs so that all linear model assumptions are met.
+
+Presume that $\mathbf{x}$ and $\mathbf{y}$ are linearly related with a normal error $\boldsymbol{\varepsilon}$ , such that $\mathbf{y} = 1 + 1.2\mathbf{x} + \boldsymbol{\varepsilon}$. The standard deviation of the error $\varepsilon_i$ is $\sigma = 2$. 
+
+We can create a sample input vector ($n = 40$) for $\mathbf{x}$ with the following code:
+
+```{r, eval = F, echo = TRUE}
+# Generates a vector of size 40 with equally spaced values between 0 and 1, inclusive
+x <- seq(0, 1, length = 40)
+```
+
+
+### Generate data
+
+Create a corresponding output vector for $\mathbf{y}$ according to the equation given above. Use `set.seed(1)`. Then, create a scatterplot with $(x_i, y_i)$ pairs. Base R plotting is acceptable, but if you can, please attempt to use `ggplot2` to create the plot. Make sure to have clear labels and sensible titles on your plots.
+
+
+### Understand the model
+i. Find the LS estimates of $\boldsymbol{\beta}_0$ and $\boldsymbol{\beta}_1$, using the `lm()` function. What are the true values of $\boldsymbol{\beta}_0$ and $\boldsymbol{\beta}_1$? Do the estimates look to be good? 
+
+ii. What is your RSE for this linear model fit? Is it close to $\sigma = 2$? 
+
+ii. What is the 95% confidence interval for $\boldsymbol{\beta}_1$? Does this confidence interval capture the true $\boldsymbol{\beta}_1$?
+
+iii. Overlay the LS estimates and the true lines of the mean function onto a copy of the scatterplot you made above.
+
+
+### diagnoses
+
+i. Provide residual plot where fitted $\mathbf{y}$-values are on the x-axis and residuals are on the y-axis. 
+
+ii. Provide a normal QQ plot of the residuals.
+
+iii. Comment on how well the model assumptions are met for the sample you used. 
+
+
+
+## Understand sampling distribution and confidence intervals
+
+This part aims to help you understand the notion of sampling statistics and confidence intervals. Let's concentrate on estimating the slope only.  
+
+Generate 100 samples of size $n = 40$, and estimate the slope coefficient from each sample. Also construct 95\% confidence intervals for the slope. 
+
+i. Summarize the LS estimates of the slope. Does the sampling distribution agree with theory? (First specify the theoretical sampling distribution of the LS estimate.)
+
+ii.  How many of your 95% confidence intervals capture the true $\boldsymbol{\beta}_1$? Display your confidence intervals graphically. 
+
+
+
+
