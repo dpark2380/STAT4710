@@ -24,46 +24,18 @@ output:
 urlcolor: blue
 ---
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, fig.width=8, fig.height=4)
 options(scipen = 0, digits = 3)  # controls base R output
 # check if you have ISLR package, if not, install it
+if(!require('ISLR')) {install.packages('ISLR')}
 if(!require('pacman')) {install.packages('pacman')}
-pacman::p_load(ISLR, tidyverse, data.table) # add the packages needed!!!
+pacman::p_load(ISLR, tidyverse, data.table)
+
+library(car)
 ```
 
-
 \pagebreak
-
-# Overview {-}
-
-Principle Component Analysis is widely used in data exploration, dimension reduction, data visualization. The aim is to transform original data into uncorrelated linear combinations of the original data while keeping the information contained in the data. High dimensional data tends to show clusters in lower dimensional view. 
-
-Clustering Analysis is another form of EDA. Here we are hoping to group data points which are close to each other within the groups and far away between different groups. Clustering using PC's can be effective. Clustering analysis can be very subjective in the way we need to summarize the properties within each group. 
-
-Both PCA and Clustering Analysis are so called unsupervised learning. There is no response variables involved in the process. 
-
-For supervised learning, we try to find out how does a set of predictors relate to some response variable of the interest. Multiple regression is still by far, one of the most popular methods. We use a linear model as a working model for its simplicity and interpretability. It is important that we use domain knowledge as much as we can to determine the form of the response as well as the function format of the factors on the other hand. 
-
-## Objectives
-
-- PCA
-- SVD
-- Clustering Analysis
-- Linear Regression
-
-## Review materials
-
-- Study Module 2: PCA
-- Study Module 3: Clustering Analysis
-- Study Module 4: Multiple regression (Including Simple regression as well)
-
-## Data needed
-
-- `NLSY79.csv`
-- `brca_subtype.csv`
-- `brca_x_patient.csv`
 
 # Case Study 3: Fuel Efficiency in Automobiles
 
@@ -74,29 +46,195 @@ Get familiar with this dataset first. Tip: you can use the command `?ISLR::Auto`
 
 ## EDA
 
-
 ```{r}
-# auto <- ISLR::Auto
-# ?ISLR::Auto
-# summary(auto) 
-# hist(auto$acceleration) # to check if there are some outliers
+auto <- ISLR::Auto
+?ISLR::Auto
+summary(auto) 
+hist(auto$acceleration) # to check if there are some outliers
+auto
 ```
 a) Explore the data, list the variables with clear definitions. Set each variable with its appropriate class. For example `origin` should be set as a factor. 
 
+```{r}
+# Adjusting the model year to match the actual year of production.
+auto$year <- 1900 + (auto$year %% 100)
+
+# Changing origin column to denote the actual country, not just a number.
+auto$origin <- factor(auto$origin,
+                      levels = c(1,2,3),
+                      labels = c("USA", "Europe", "Japan"))
+```
+
+Explaining the Variables:
+
+`mpg`: Miles per gallon, a measurement of fuel economy, outlining how many miles the car is able to travel on a gallon of gas.
+`cylinders`: The number of cylinders the car's engine has, ranging from 4-8 cylinders.
+`displacement`: The engine displacement in cubic inches.
+`horsepower`: The power of the engine in horsepower.
+`weight`: The weight of the vehicle in lbs.
+`acceleration`: Time to accelerate from 0 to 60 mph in seconds.
+`year`: The model year of the vehicle.
+`origin`: The car's country of origin.
+`name`: Brand and model name of the vehicle.
+
+All variables except `origin` and `name` are numeric. `origin` is a categorical factor that represents the country of manufacture.
+
+
 b) How many cars are included in this data set? 
 
+```{r}
+nrow(auto)
+```
+392 cars are included in this data set.
+
+
 c) EDA, focus on pairwise plots and summary statistics. Briefly summarize your findings and any peculiarities in the data.
+
+```{r}
+auto %>%
+  summarise(mean_mpg = mean(mpg),
+            sd_mpg   = sd(mpg),
+            min_mpg  = min(mpg),
+            max_mpg  = max(mpg))
+
+```
+
+The average mpg was 23.4, with the least fuel economic car achieving only 9 mpg, while the more fuel economic car achieved 46.6 mpg. There is moderate variation in the mpg, with a standard deviation of 7.81 mpg.
+
+```{r}
+auto %>%
+  group_by(origin) %>%
+  summarise(mean_mpg = mean(mpg),
+            sd_mpg   = sd(mpg))
+
+```
+
+Grouping the vehicles by country, the mean and standard deviation of fuel economy reveals that Japanese cars on average have the greatest mpg at 30.5, followed by European then American vehicles. 
+
+The fuel economy in Japanese cars was also the most consistent, with a standard deviation of 6.09 mpg, compared to 6.58 and 6.44 mpg for European and American cars respectively.
+
+Relationship between Displacement and MPG
+```{r}
+plot(auto$displacement, auto$mpg,
+     xlab = "Engine Displacement (cu. inches)",
+     ylab = "Miles per Gallon (MPG)",
+     main = "Relationship between Displacement and MPG")
+```
+
+The scatterplot above shows that as the engine's displacement increases, the MPG decreases.
+
+Relationship between Weight and MPG
+
+```{r}
+plot(auto$weight, auto$mpg,
+     xlab = "Weight of Vehicle (lbs)",
+     ylab = "Miles per Gallon (MPG)",
+     main = "Relationship between Weight and MPG")
+```
+
+
+
+
+Relationship between Acceleration and MPG
+
+```{r}
+plot(auto$acceleration, auto$mpg,
+     xlab = "Acceleration Time (0-60 mph)",
+     ylab = "Miles per Gallon (MPG)",
+     main = "Relationship between Displacement and MPG")
+```
 
 
 ## What effect does `time` have on `MPG`?
 
 a) Start with a simple regression of `mpg` vs. `year` and report R's `summary` output. Is `year` a significant variable at the .05 level? State what effect `year` has on `mpg`, if any, according to this model. 
 
+```{r}
+plot(auto$year, auto$mpg,
+     pch = 16,
+     col = "blue",
+     xlab = "Year",
+     ylab = "MPG",
+     main = "MPG vs Year")
+
+abline(lm(mpg ~ year, data = auto),
+       col = "red",
+       lwd = 2)
+
+fit = lm(mpg ~ year, data = auto)
+
+confint(fit)
+summary(fit)
+```
+
+The p-value for this linear model is <2e-16. Hence, we can conclude that year is a significant variable at the .05 level. The regression line suggests that on average, as the year increases, the mpg increases by 1.23. 
+
+
 b) Add `horsepower` on top of the variable `year` to your linear model. Is `year` still a significant variable at the .05 level? Give a precise interpretation of the `year`'s effect found here. 
+
+```{r}
+plot(auto$horsepower, auto$mpg,
+     pch = 16,
+     col = "blue",
+     xlab = "Horsepower",
+     ylab = "MPG",
+     main = "MPG vs Horsepower")
+
+abline(lm(mpg ~ horsepower, data = auto),
+       col = "red",
+       lwd = 2)
+```
+
+As the horsepower output of the vehicle increases, the mpg decreases.
+
+```{r}
+fit = lm(mpg ~ year + horsepower, data = auto)
+
+confint(fit)
+summary(fit)
+```
+
+After fitting the multiple linear regression model, while holding the horsepower constant, a one-year increase in the model year is associated with an average increase of approximately 0.657 mpg. Comparing to simple regression, where a one-year increase in model year lead to an increase of 1.23 mpg on average, after controlling for horsepower, it almost halved.
+
+Now holding year constant, a one-unit increase in horsepower leads to a decrease of about 0.132 mpg on average. The p-values for both year and horsepower are < 2e-16, meaning they are both statistically significant at the 0.05 level. 
+
+The residual standard error suggests that the typical deviation of observed mpg values from the fitted regression surface is about 4.39 mpg.
+
 
 c) The two 95% CI's for the coefficient of year differ among (a) and (b). How would you explain the difference to a non-statistician?
 
+For the simple regression, the 95% CI was $$(1.06, 1.40)$$.
+This means that each additional year is associated with an increase of 1.06-1.4 mpg, when year is the only predictor.
+
+For the multiple linear regression, the 95% CI was $$(0.527, 0.788)$$,
+which means that the an increase in year leads to only abour 0.66 mpg, after adjusting for horsepower.
+
+```{r}
+cor(auto$year, auto$horsepower)
+```
+
+Obtaining the correlation between year and horsepower, we see there is a negative correlation. This means that as year increases, horsepower tends to decrease on average. Historically, this is true, as vehicles from the 1970s had bigger engines with higher horsepower. However, after the energy crisis in the 1970s and 1980s, the sizes of engines got much smaller, which in turn decreased the horsepower output of these vehicles. 
+
+This explains why when we keep horsepower constant as year increases, the fuel economy doesn't improve as much, giving a lower confidence interval.
+
 d) Create a model with interaction by fitting `lm(mpg ~ year * horsepower)`. Is the interaction effect significant at .05 level? Explain the year effect (if any). 
+
+```{r}
+fit_int <- lm(mpg ~ year * horsepower, data = auto)
+summary(fit_int)
+```
+
+The interaction between year and horsepower is statistically significant at the 0.05 level as the p-values are <2e-16.
+The fitted model is effectively
+$$ mpg = \beta_0+\beta_1\times year+\beta_2\times horsepower+\beta_3(year\times horsepower)$$
+From this we can conclude that the effect of year now also depends on horsepower.
+
+- For low horsepower cars → year has a larger positive effect.
+- For high horsepower cars → year has a smaller positive effect.
+
+The negative interaction coefficient of -0.016 for year:horsepower means the year improvement in mpg shrinks as horsepower increases.
+
+
 
 ## Categorical predictors
 
@@ -104,11 +242,98 @@ Remember that the same variable can play different roles! Take a quick look at t
 
 a) Fit a model that treats `cylinders` as a continuous/numeric variable. Is `cylinders` significant at the 0.01 level? What effect does `cylinders` play in this model?
 
+```{r}
+fit_num <- lm(mpg ~ cylinders, data = auto)
+summary(fit_num)
+confint(fit_num)
+
+summary(fit_num)$coefficients["cylinders", "Pr(>|t|)"] < 0.01
+coef(fit_num)["cylinders"]
+```
+
+The p-value for `cylinders` is <2e-16, hence cylinders is statistically significant at the 0.01 level.
+
+The slope estimate is -3.558, indicating that for each additional cylinder, the expected mpg decreases by approximately 3.558 on average.
+
+The 95% confidence interval for the slop is $$(-3.84, -3.27)$$.
+
+The entire interval is negative, confirming a strong negative relationship betwene cylinders and mpg, further highlighted in the plot below.
+
+```{r}
+ggplot(auto, aes(x = cylinders, y = mpg)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "MPG vs Cylinders (continuous)", x = "Cylinders", y = "MPG")
+```
+
+
+
 b) Fit a model that treats `cylinders` as a categorical/factor. Is `cylinders` significant at the .01 level? What is the effect of `cylinders` in this model? Describe the `cylinders` effect over `mpg`. 
+
+```{r}
+# Changing cylinders into a factor variable.
+auto$cylinders_f <- factor(auto$cylinders)
+
+auto$cylinders_f <- factor(auto$cylinders)
+
+fit_fac <- lm(mpg ~ cylinders_f, data = auto)
+summary(fit_fac)
+confint(fit_fac)
+
+# Overall significance of cylinders.
+Anova(fit_fac)
+
+# Computing mean and standard deviation for different cylinder counts.
+auto %>%
+  group_by(cylinders_f) %>%
+  summarise(
+    n = n(),
+    mean_mpg = mean(mpg),
+    sd_mpg = sd(mpg)
+  )
+```
+
+The p-value for cylinders is still <2e-16 even as a categorical variable, significant at the 0.01 level.
+
+Looking at the table of mean and standard deviation for the different cylinder counts, we can see that 4 cylinder vehicles have the highest mean mpg and the fuel economy decreases as the numbe rof cylinders increases. We can see that the mean mpg for 3 cylinder vehicles is fairly low, which goes against the trend identified in part a). However, we see that there are only 4 observations with 3 cylinders, so this estimate is unstable and not representative of the true fuel economy of these vehicles. This is also true for 5 cylinder vehicles, for which there were only 3 observations.
+
+
+```{r}
+ggplot(auto, aes(x = cylinders_f, y = mpg)) +
+  geom_boxplot() +
+  labs(title = "MPG by Cylinders (factor)", x = "Cylinders", y = "MPG")
+```
+
+Observing the box plot we can see that there are a lot of outliers for 6 cylinder vehicles, with one vehicle achieving greater mpg than the most fuel efficient 5 cylinder vehicle. 4 cylinder vehicles have the greatest range in mpg values, but also has the most number of observations.
+
 
 c) What are the fundamental differences between treating `cylinders` as a continuous and categorical variable in your models? 
 
+The numerical model assumes that
+$$ E[mpg|cylinders]=\beta_0+\beta_1\times cylinders $$
+
+This forces a linear trend and imposes a constant change in mpg per each additional cylinder added.
+
+Meanwhile, the factor model assumes that 
+$$E[mpg|cylinders=k]=\mu_k$$
+
+This does not assume linearity, allowing each cylinder category to have its own mean.
+
 d) Can you test the null hypothesis: fit0: `mpg` is linear in `cylinders` vs. fit1: `mpg` relates to `cylinders` as a categorical variable at .01 level?  
+
+```{r}
+## Nested-model F test via anova(reduced, full):
+## reduced: mpg ~ cylinders
+## full:    mpg ~ cylinders_f
+anova(fit_num, fit_fac)
+```
+anova was used to compare the linear and factor models. From the ANOVA table, we see that
+$$F=13.2,\qquad p=3.4\times 10^{-8}$$
+
+Since $$3.4\times 10^{-8}<0.01$$,
+we reject the null hypothesis at the 0.01 level, which states that the true relationship between mpg and cylinders was linear.
+
+Hence, there is strong evidence that the relationship between mpg and cylinder is not purely linear, proving that the categorical model provides a much better fit than the linear model. Treating `cylinders` as a factor variable (which it is), is more appropriate.
 
 
 ## Results
@@ -117,50 +342,190 @@ Final modeling question: we want to explore the effects of each feature as best 
   
 a) Describe the final model. Include diagnostic plots with particular focus on the model residuals and diagnoses.
 
+```{r}
+cor(auto[, c("displacement", "weight", "horsepower")])
+
+```
+We can see displacement is highly correlated with both weight and horsepower, meaning keeping all three variables would not be necessary and would increase standard errors and reduce interpretability. Hence, displacement will be excluded from the final model.
+
+
+```{r}
+auto$cylinders_f <- factor(auto$cylinders)
+
+final_fit <- lm(mpg ~ year +
+                       weight +
+                       horsepower +
+                       cylinders_f +
+                       origin,
+                data = auto)
+```
+
+The final model is $$mpg \sim year+weight+horsepower+cylinders+origin$$.
+
+```{r}
+par(mfrow = c(2,2))
+plot(final_fit, which = 1)
+plot(final_fit, which = 2)
+```
+
+The line shown in the residuals vs fitted plot shows a slight curvature suggesting minor non-linearity. From the Q-Q plot we can see that there is a small increase in variance at higher fitted values, indicating slight heteroskedasticity. However, the vast majority of the points lie along the line suggesting that the model provides a strong and appropriate fit to the data. 
+
+
 b) Summarize the effects found.
+
+```{r}
+summary(final_fit)
+```
+
+Year and weight have p-values <2e-16. A unit increase in year leads to a 0.722 increase in mpg on average, while each pound added to a vehicle's weight decreases its mpg by -0.0051 on average. Each additional horsepower reduces mpg by about 0.0254, but the p-value is 0.00977, which is close to the 0.01 threshold, indicating the horsepower is less statistically significant that year and weight. 
+
+Treating cylinders as a categorical variable confirms that engine configuration affects MPG in a non-linear manner. Additionally, vehicles from Japan and Europe exhibit higher MPG (1.28 and 2.21 mpg respectively) relative to U.S. vehicles after controlling for mechanical characteristics.
+
+Overall, fuel efficiency is strongly influenced by vehicle size, engine output, year, and country of origin.
+
 
 c) Predict the `mpg` of the following car: A red car built in the US in 1983 that is 180 inches long, has eight cylinders, displaces 350 cu. inches, weighs 4000 pounds, and has a horsepower of 260. Also give a 95% CI for your prediction.
 
+Since colour, length and displacement are not included in the model, they are not used in prediction.
 
-# Simple Regression through simulations 
-    
+```{r}
+# your fitted model (use whatever object name you used)
+final_fit <- lm(mpg ~ year + weight + horsepower + cylinders_f + origin, data = auto)
+
+# make sure factor levels match the model
+newcar <- data.frame(
+  year = 1983,
+  weight = 4000,
+  horsepower = 260,
+  cylinders_f = factor(8, levels = levels(auto$cylinders_f)),
+  origin = factor("USA", levels = levels(auto$origin))
+)
+
+
+# 95% confidence interval for the mean mpg
+predict(final_fit, newdata = newcar, interval = "prediction", level = 0.95)
+```
+
+Using the model described above, the predicted mpg of the vehicle is 19.5 mpg. The 95% confidence interval is $$(12.9, 26.1)$$.
+
+
+# Simple Regression through simulations
+
 ## Linear model through simulations
 
 This exercise is designed to help you understand the linear model using simulations. In this exercise, we will generate $(x_i, y_i)$ pairs so that all linear model assumptions are met.
 
 Presume that $\mathbf{x}$ and $\mathbf{y}$ are linearly related with a normal error $\boldsymbol{\varepsilon}$ , such that $\mathbf{y} = 1 + 1.2\mathbf{x} + \boldsymbol{\varepsilon}$. The standard deviation of the error $\varepsilon_i$ is $\sigma = 2$. 
 
-We can create a sample input vector ($n = 40$) for $\mathbf{x}$ with the following code:
-
-```{r, eval = F, echo = TRUE}
-# Generates a vector of size 40 with equally spaced values between 0 and 1, inclusive
-x <- seq(0, 1, length = 40)
-```
-
-
 ### Generate data
 
 Create a corresponding output vector for $\mathbf{y}$ according to the equation given above. Use `set.seed(1)`. Then, create a scatterplot with $(x_i, y_i)$ pairs. Base R plotting is acceptable, but if you can, please attempt to use `ggplot2` to create the plot. Make sure to have clear labels and sensible titles on your plots.
+
+```{r}
+set.seed(1)
+
+# x values (n = 40)
+x <- seq(0, 1, length = 40)
+
+# Generating y values with given information
+y <- 1 + 1.2*x + rnorm(40, mean = 0, sd = 2)
+
+df <- data.frame(x = x, y = y)
+
+# Plotting scatterplot
+ggplot(df, aes(x = x, y = y)) +
+  geom_point() +
+  labs(title = "Simulated data: y = 1 + 1.2x + eps (sd = 2)",
+       x = "x", y = "y")
+```
+
 
 
 ### Understand the model
 i. Find the LS estimates of $\boldsymbol{\beta}_0$ and $\boldsymbol{\beta}_1$, using the `lm()` function. What are the true values of $\boldsymbol{\beta}_0$ and $\boldsymbol{\beta}_1$? Do the estimates look to be good? 
 
+```{r}
+fit <- lm(y ~ x, data = df)
+
+# i) LS estimates
+summary(fit)
+
+# true values
+beta0_true <- 1
+beta1_true <- 1.2
+
+# estimated values
+beta_hat <- coef(fit)
+beta0_hat <- beta_hat[1]
+beta1_hat <- beta_hat[2]
+
+beta0_hat
+beta1_hat
+```
+
+The true values for $\beta_0 and \beta_1$ are 1 and 1.2 respectively. 
+
+The estimated values are: $\hat\beta_0=0.906, \hat\beta_1=1.33$. The estimates are fairly close to the true value.
+
 ii. What is your RSE for this linear model fit? Is it close to $\sigma = 2$? 
 
-ii. What is the 95% confidence interval for $\boldsymbol{\beta}_1$? Does this confidence interval capture the true $\boldsymbol{\beta}_1$?
+```{r}
+# RSE (Residual Standard Error)
+summary(fit)$sigma
+```
 
-iii. Overlay the LS estimates and the true lines of the mean function onto a copy of the scatterplot you made above.
+The residual standard error of 1.79 is fairly close to the true value $\sigma = 2$.
 
+iii. What is the 95% confidence interval for $\boldsymbol{\beta}_1$? Does this confidence interval capture the true $\boldsymbol{\beta}_1$?
+
+```{r}
+# 95% CI
+confint(fit)["x", ]
+```
+
+We have a 95% confidence interval of $(-1.03, 2.85)$, which includes the true value $\boldsymbol{\beta}_1=1.2$.
+
+iv. Overlay the LS estimates and the true lines of the mean function onto a copy of the scatterplot you made above.
+
+```{r}
+ggplot(df, aes(x = x, y = y)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_abline(intercept = 1, slope = 1.2) +
+  labs(title = "LS fit (smooth) vs true mean (abline)",
+       x = "x", y = "y")
+```
+
+The black line is the true mean function. The blue line is the least squares fitted line. The two lines are fairly close, with minor deviations at lower x values. 
 
 ### diagnoses
 
 i. Provide residual plot where fitted $\mathbf{y}$-values are on the x-axis and residuals are on the y-axis. 
 
+```{r}
+plot(fitted(fit), resid(fit),
+     xlab = "Fitted values",
+     ylab = "Residuals",
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+```
+
+
 ii. Provide a normal QQ plot of the residuals.
+
+```{r}
+qqnorm(resid(fit))
+qqline(resid(fit), col = "red")
+```
+
 
 iii. Comment on how well the model assumptions are met for the sample you used. 
 
+The residuals vs fitted plot shows no systematic pattern or curvature. The residuals are randomly scattered around zero, with approximately constant spread, suggesting that the linearity and homoscedasticity assumptions are satisfied.
+
+From the Q-Q plot we can see that several points fall below the reference line in the lower tail. However, this is expected for a small sample size of 40. The remaining points lie closely to the reference line.
+
+Linear model assumptions are well satisfied in this sample.
 
 
 ## Understand sampling distribution and confidence intervals
@@ -171,8 +536,77 @@ Generate 100 samples of size $n = 40$, and estimate the slope coefficient from e
 
 i. Summarize the LS estimates of the slope. Does the sampling distribution agree with theory? (First specify the theoretical sampling distribution of the LS estimate.)
 
+```{r}
+set.seed(1)
+
+n <- 40
+x <- seq(0, 1, length = n)
+
+beta0 <- 1
+beta1 <- 1.2
+sigma <- 2
+
+B <- 100
+
+# Computing total variation in the predictor x.
+Sxx <- sum((x - mean(x))^2)
+# theoretical sd of beta1_hat
+theory_sd <- sigma / sqrt(Sxx)
+
+slopes <- numeric(B)
+lwr <- numeric(B)
+upr <- numeric(B)
+
+for (b in 1:B) {
+  y <- beta0 + beta1*x + rnorm(n, mean = 0, sd = sigma)
+  fit <- lm(y ~ x)
+  slopes[b] <- coef(fit)["x"]
+  
+  # Updating the confidence interval values for each simulation
+  ci <- confint(fit)["x", ]
+  lwr[b] <- ci[1]
+  upr[b] <- ci[2]
+}
+
+# summary of LS slope estimates
+mean(slopes)
+sd(slopes)
+
+# theoretical standard deviation
+theory_sd
+```
+
+Under a simple linear model $$y_i=\beta_0+\beta_1x_i+\epsilon_i,\qquad \epsilon_i\sim N(0,\sigma^2)$$
+with fixed $x_1,...,x_n$, the least squares slope satisfies $$\hat\beta_1\sim N\bigg(\beta_1,\frac{\sigma^2}{S_{xx}}\bigg),\quad where \ \ S_{xx}=\sum_{i=1}^n(x_i-\bar x)^2.$$
+In this simulation, we have $\beta_1=1.2 \ and \ \sigma=2$, so
+
+$$\hat{\beta}_1 \sim N\!\left(1.2,\; \frac{4}{S_{xx}}\right), \quad \text{and} \quad \mathrm{SD}(\hat{\beta}_1) = \frac{2}{\sqrt{S_{xx}}}.$$
+The simulated standard deviation of 1.1 is close to the theoretical value of 1.07, so the variability matches the theory well.
+However, the simulated mean for the slope of 1.04 is slightly below the true slope of 1.2. Theoretically we would have $E[\hat\beta_1]=\beta_1$. This discrepancy can be improved by conducting more simulations, and the simulated mean will converge to the true value.
+
 ii.  How many of your 95% confidence intervals capture the true $\boldsymbol{\beta}_1$? Display your confidence intervals graphically. 
 
+```{r}
+ci_df <- tibble(
+  sample = 1:B,
+  slope = slopes,
+  lwr = lwr,
+  upr = upr,
+  covers = (lwr <= beta1 & beta1 <= upr)
+) %>% 
+  arrange(lwr)
 
+ggplot(ci_df, aes(y = reorder(sample, lwr), x = slope)) +
+  geom_errorbar(aes(xmin = lwr, xmax = upr),
+                orientation = "y") +
+  geom_vline(xintercept = beta1, linetype = "dashed") +
+  labs(
+    title = "95% Confidence Intervals for Slope (100 samples)",
+    x = expression(hat(beta)[1]),
+    y = "Sample (ordered)"
+  )
 
+mean(ci_df$covers)
+```
 
+Out of 100 simulated samples, 96 of the 95% confidence intervals contained the true slope $\beta_1=1.2$. This empirical coverage rate of 96% is very close to the theoretical coverage of 95%.

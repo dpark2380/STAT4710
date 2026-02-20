@@ -1,0 +1,519 @@
+---
+title: "Modern Data Mining, HW 2"
+author:
+- Group Member 1
+- Group Member 2
+- Group Member 3
+date: 'Due: 11:59 PM,  Sunday, 02/22'
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+# check if you have ISLR package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(ISLR, tidyverse, data.table, leaps) # add the packages needed!!!
+```
+
+
+\pagebreak
+
+# Case study 1: Self-esteem 
+
+Self-esteem generally describes a person's overall sense of self-worthiness and personal value. It can play significant role in one's motivation and success throughout the life. Factors that influence self-esteem can be inner thinking, health condition, age, life experiences etc. We will try to identify possible factors in our data that are related to the level of self-esteem. 
+
+In the well-cited National Longitudinal Study of Youth (NLSY79), it follows about 13,000 individuals and numerous individual-year information has been gathered through surveys. The survey data is open to public [here](https://www.nlsinfo.org/investigator/). Among many variables we assembled a subset of variables including personal demographic variables in different years, household environment in 79, ASVAB test Scores in 81 and Self-Esteem scores in 81 and 87 respectively. 
+
+The data is store in `NLSY79.csv`.
+
+Here are the description of variables:
+
+**Personal Demographic Variables**
+
+* Gender: a factor with levels "female" and "male"
+* Education05: years of education completed by 2005
+* HeightFeet05, HeightInch05: height measurement. For example, a person of 5'10 will be recorded as HeightFeet05=5, HeightInch05=10.
+* Weight05: weight in lbs.
+* Income87, Income05: total annual income from wages and salary in 2005. 
+* Job87 (missing), Job05: job type in 1987 and 2005, including Protective Service Occupations, Food Preparation and Serving Related Occupations, Cleaning and Building Service Occupations, Entertainment Attendants and Related Workers, Funeral Related Occupations, Personal Care and Service Workers, Sales and Related Workers, Office and Administrative Support Workers, Farming, Fishing and Forestry Occupations, Construction Trade and Extraction Workers, Installation, Maintenance and Repairs Workers, Production and Operating Workers, Food Preparation Occupations, Setters, Operators and Tenders,  Transportation and Material Moving Workers
+ 
+**Household Environment**
+ 
+* Imagazine: a variable taking on the value 1 if anyone in the respondent’s household regularly read magazines in 1979, otherwise 0
+* Inewspaper: a variable taking on the value 1 if anyone in the respondent’s household regularly read newspapers in 1979, otherwise 0
+* Ilibrary: a variable taking on the value 1 if anyone in the respondent’s household had a library card in 1979, otherwise 0
+* MotherEd: mother’s years of education
+* FatherEd: father’s years of education
+* FamilyIncome78
+
+**Variables Related to ASVAB test Scores in 1981**
+
+Test | Description
+--------- | ------------------------------------------------------
+AFQT | percentile score on the AFQT intelligence test in 1981 
+Coding | score on the Coding Speed test in 1981
+Auto | score on the Automotive and Shop test in 1981
+Mechanic | score on the Mechanic test in 1981
+Elec | score on the Electronics Information test in 1981
+Science | score on the General Science test in 1981
+Math | score on the Math test in 1981
+Arith | score on the Arithmetic Reasoning test in 1981
+Word | score on the Word Knowledge Test in 1981
+Parag | score on the Paragraph Comprehension test in 1981
+Numer | score on the Numerical Operations test in 1981
+
+**Self-Esteem test 81 and 87**
+
+We have two sets of self-esteem test, one in 1981 and the other in 1987. Each set has same 10 questions. 
+They are labeled as `Esteem81` and `Esteem87` respectively followed by the question number.
+For example, `Esteem81_1` is Esteem question 1 in 81.
+
+The following 10 questions are answered as 1: strongly agree, 2: agree, 3: disagree, 4: strongly disagree
+
+* Esteem 1: “I am a person of worth”
+* Esteem 2: “I have a number of good qualities”
+* Esteem 3: “I am inclined to feel like a failure”
+* Esteem 4: “I do things as well as others”
+* Esteem 5: “I do not have much to be proud of”
+* Esteem 6: “I take a positive attitude towards myself and others”
+* Esteem 7: “I am satisfied with myself”
+* Esteem 8: “I wish I could have more respect for myself”
+* Esteem 9: “I feel useless at times”
+* Esteem 10: “I think I am no good at all”
+
+## Data preparation
+
+Load the data. Do a quick EDA to get familiar with the data set. Pay attention to the unit of each variable. Are there any missing values? 
+
+```{r}
+# Load the data
+temp <- read.csv('data/NLSY79.csv', header = T, stringsAsFactors = F)
+
+# Visualise the structure of the data
+str(temp)
+
+# Check for missing values
+any(is.na(temp))
+
+# Provide summaries of the data
+summary(temp)
+levels(as.factor(temp$Job05))
+table(as.factor(temp$Job05))
+```
+
+
+## Self esteem evaluation
+
+**Let concentrate on Esteem scores evaluated in 87. **
+
+0. First do a quick summary over all the `Esteem` variables. Pay attention to missing values, any peculiar numbers etc. How do you fix problems discovered if there is any? Briefly describe what you have done for the data preparation. 
+
+```{r}
+# The following 10 questions are answered as 1: strongly agree, 2: agree, 3: disagree, 4: strongly disagree
+summary(temp$Esteem87_1) # “I am a person of worth”
+any(is.na(temp$Esteem87_1))
+
+summary(temp$Esteem87_2) # “I have a number of good qualities”
+any(is.na(temp$Esteem87_2))
+
+summary(temp$Esteem87_3) # “I am inclined to feel like a failure”
+any(is.na(temp$Esteem87_3))
+
+summary(temp$Esteem87_4) # “I do things as well as others”
+any(is.na(temp$Esteem87_4))
+
+summary(temp$Esteem87_5) # “I do not have much to be proud of”
+any(is.na(temp$Esteem87_5))
+
+summary(temp$Esteem87_6) # “I take a positive attitude towards myself and others”
+any(is.na(temp$Esteem87_6))
+
+summary(temp$Esteem87_7) # “I am satisfied with myself”
+any(is.na(temp$Esteem87_7))
+
+summary(temp$Esteem87_8) # “I wish I could have more respect for myself”
+any(is.na(temp$Esteem87_8))
+
+summary(temp$Esteem87_9) # “I feel useless at times”
+any(is.na(temp$Esteem87_9))
+
+summary(temp$Esteem87_10) # “I think I am no good at all”
+any(is.na(temp$Esteem87_10))
+```
+
+The first thing I did was create a summary of all the data to provide basic insights into the distribution of the Esteem_87 scores. After this I checked for missing values (of which there are none) and exmined the intepretation of the scores more carefully. From this, I understood that there were some questions which were framed in such a way that higher scores indicated higher levels of self-esteem, and other questions which were framed in such a way that lower score indicated higher self-esteem. This needs to be standardised across all the questions to ensure easy comparison across the different questions in Esteem_87.
+
+
+1. Please note that higher scores on Esteem questions 1, 2, 4, 6, and 7 indicate higher self-esteem, whereas higher scores on the remaining questions suggest lower self-esteem. To maintain consistency, consider reversing the scores of certain Esteem questions. For example, if the esteem data is stored in `data.esteem`, you can use the code `data.esteem[, c(1, 2, 4, 6, 7)] <- 5 - data.esteem[, c(1, 2, 4, 6, 7)]` to invert the scores.
+
+```{r}
+# This will ensure that higher scores reflect higher self-esteem.
+temp$Esteem87_1 <- 5 - temp$Esteem87_1
+temp$Esteem87_2 <- 5 - temp$Esteem87_2
+temp$Esteem87_4 <- 5 - temp$Esteem87_4
+temp$Esteem87_6 <- 5 - temp$Esteem87_6
+temp$Esteem87_7 <- 5 - temp$Esteem87_7
+```
+
+To fix this, I identified questions which were framed in a positive way (Questions 1, 2, 4, 6 and 7). This meant that lower scores ("Strongly Agree") indicated higher self-esteem. I inverted these scores, creating a standardised measure where higher scores across all questions indicated higher self-esteem.
+
+2. Write a brief summary with necessary plots about the 10 esteem measurements.
+
+```{r}
+esteem_vars <- c("Esteem87_1", "Esteem87_2", "Esteem87_3","Esteem87_4", "Esteem87_5", "Esteem87_6","Esteem87_7", "Esteem87_8", "Esteem87_9","Esteem87_10")
+
+par(mfrow = c(2,5), mar = c(3,3,2,1))
+
+for (v in esteem_vars) {
+  counts <- table(factor(temp[[v]], levels = 1:4))
+  
+  barplot(counts,
+          main = v,
+          xlab = "",
+          ylab = "Count",
+          col = "orange")
+}
+
+par(mfrow = c(1,1))
+
+```
+
+Esteem87_1 through to Esteem87_5 are highly left-skewed, meaning that the vast majority of tests scores are 3 and 4, and with means of 3.6, 3.58, 3.5, 3.53 and 3.41 respective Whilst the remaining Esteem87_6 through to Esteem87_10 are still left-skewed, they are to a lesser extent, with means of 3.28, 3.1, 3.06 and 3.37.
+
+
+3. Do esteem scores all positively correlated? Report the pairwise correlation table and write a brief summary.
+
+```{r}
+esteem_vars <- c("Esteem87_1", "Esteem87_2", "Esteem87_3","Esteem87_4", "Esteem87_5", "Esteem87_6","Esteem87_7", "Esteem87_8", "Esteem87_9","Esteem87_10")
+esteem_data <- temp[esteem_vars]
+
+cor_matrix <- cor(esteem_data, use = "pairwise.complete.obs")
+cor_matrix
+```
+
+All of the scores are positively correlated, with a minimum correlation between Esteem87_1 & Esteem87_8 (0.273) and Esteem87_1 & Esteem87_9 (0.236), and a maximum between Esteemed87_1 & Esteemed87_2 (0.704).
+
+
+4. PCA on 10 esteem measurements. (centered but no scaling)
+
+    a) Report the PC1 and PC2 loadings. Are they unit vectors? Are they orthogonal?
+    
+```{r}
+pca_result <- prcomp(esteem_data, scale. = TRUE)
+pca_result$rotation[, 1:2]    
+```
+    Yes, both PC1 and PC2 loadings are orthogonal, unit vectors.
+  
+    b) Are there good interpretations for PC1 and PC2? (If loadings are all negative, take the positive loadings for the ease of interpretation)
+  
+    Loadings are direction vectors that define each PC. Large absolute loadings indicate a strong contribution, and the signs indicate in which direction they move relative to each other.     In this case, all the PC1 scores are positive, indicating that all the variables move in the same directon together. Furthermore, Esteem87_6 (0.347) and Esteem87_2 (0.333) are the        most significant loadings. Looking at PC2, we see that Esteem87_1, Esteem87_2, Esteem87_4 and Esteem87_6 are negative whilst the remaining are positive, indicating that these two sets     of variables move in contrasting directions. Furthermore, Esteem87_9 (0.4917), Esteem87_1 (-0.4452) and Esteem87_2 (-0.4283) are the most significant loadings.
+    
+    c) How is the PC1 score obtained for each subject? Write down the formula.
+    
+    The PC1 score for variable i is obtained as a linear combination of the standardised Esteem87 variables, each weighted by their corresponding loadings. In this case, the PC1 score is     obtained using the formula: PC1i = 0.324Zi1 + 0.333Zi2 + 0.322Zi3 + ... + 0.318Zi10.
+    
+    d) Are PC1 scores and PC2 scores in the data uncorrelated? 
+    
+    Yes, the PC1 and PC2 scores are uncorrelated because PC1 is orthogonal to PC2.
+    
+    e) Plot PVE (Proportion of Variance Explained) and summarize the plot. 
+    
+    ```{r}
+    eigenvalues <- pca_result$sdev^2
+    prop <- eigenvalues / sum(eigenvalues)
+    
+    plot(1:length(prop), prop,
+     type = "b",
+     xlab = "Principal Component",
+     ylab = "Proportion of Variance Explained",
+     main = "Scree Plot",
+     pch = 19)
+    ```
+    
+    f) Also plot CPVE (Cumulative Proportion of Variance Explained). What proportion of the variance in the data is explained by the first two principal components?
+    
+    ```{r}
+    plot(1:length(prop), cumsum(prop),
+     type = "b",
+     xlab = "Principal Component",
+     ylab = "Cumulative Proportion of Variance Explained",
+     main = "Cumulative PVE",
+     pch = 19)
+    ```
+  
+    From this, we can see that 60% of the variance is explained by the first two variables.
+    
+    g) PC’s provide us with a low dimensional view of the self-esteem scores. Use a biplot with the first two PC's to display the data. Give an interpretation of PC1 and PC2 from the plot. 
+    
+```{r}
+biplot(pca_result, scale = 0, cex = 1.2)
+```
+    
+    From this, we can see that all loadings for PC1 (x-axis) point in the positive direction, indicating a positive level of self-esteem across all variables. Since there are no extreme      loadings weightings, PC1 is essentially an average of all of the loadings, and as such, can be interpreted as a general level of self-esteem.
+    
+    Conversely, looking at PC2 (y-axis) we see that the loadings go in both the positive and negative directions, breaking the variable loadings into two different groups. This is likely     visualise the different effects of positively-worded and negatively-worded questions. With the exception of Esteem87_7 "I am satisfied with myself", all of the negatively-worded          questions, reflect better (positive) self-esteem compared with positvely-worded questions.
+    
+
+5. Apply k-means to cluster subjects on the original esteem scores
+
+    a) Find a reasonable number of clusters using within sum of squared with elbow rules.
+    
+```{r}
+pc_data <- pca_result$x[, 1:2]
+temp$Esteem_PC1 <- pca_result$x[, 1]
+
+wss <- numeric(10)
+
+for (k in 1:10) {
+  kmeans_result <- kmeans(pc_data, centers = k, nstart = 20)
+  wss[k] <- kmeans_result$tot.withinss
+}
+
+plot(1:10, wss,
+ type = "b",
+ xlab = "Number of Clusters (k)",
+ ylab = "Total Within-Cluster Sum of Squares",
+ main = "Elbow Method")
+```
+    
+    Looking at the Total Within-Cluster Sum of Squares, we can identify an elbow at 3 clusters
+    
+    b) Can you summarize common features within each cluster?
+    
+```{r}
+set.seed(123)
+cluster_cols <- c("orange", "blue", "gold")
+
+kmeans_result <- kmeans(pc_data,
+                        centers = 3,
+                        nstart = 25)
+
+kmeans_result$size
+kmeans_result$centers
+
+plot(pc_data,
+ col = cluster_cols[kmeans_result$cluster],
+ pch = 19,
+ xlab = "PC1",
+ ylab = "PC2",
+ main = "K-means Clustering on PC1 and PC2")
+
+points(kmeans_result$centers,
+   col = "black",
+   pch = 8,
+   cex = 2,
+   lwd = 2)
+```
+    
+    Cluster 1 contains 843 observations and is centred at (-2.3627, 0.6000); Cluster 2 contains 697 observations and is centred at (-0.0473, -1.1300); and Cluster 3 contains 891              observations and is centred at (2.2725, 0.3160).
+    
+    Going of my interpretation of PC1 as overall self-esteem, we can then classify Cluster 1 as low self-esteem, Cluster 2 as average self-esteem and Cluster 3 as high self-esteem.           When examining PC2 above, we suggested that it may be the differing tone in which the questions were framed (positive and negative). Clusters 1 and 3 contain mostly positive values       with some negative values, whereas Cluster 2 contains mostly negative values. This interpretation does not apply to these clusters because there are three clusters, rather than 2, and     each cluster contains a range of positive and negative values. As such, this clusters around some factor impacting PC2, however, we were unable to find a clear interpretation.
+    
+    c) Can you visualize the clusters with somewhat clear boundaries? You may try different pairs of variables and different PC pairs of the esteem scores.
+
+    Note, in this case, we have chosen to only cluster around PCs due to the potential for multicollinearity between variables in the data and the presence of unwanted noise.
+
+```{r}
+pc_data <- pca_result$x[, c(1, 3)]
+
+set.seed(123)
+cluster_cols <- c("orange", "blue", "gold")
+
+kmeans_result <- kmeans(pc_data,
+                        centers = 3,
+                        nstart = 25)
+
+kmeans_result$size
+kmeans_result$centers
+
+plot(pc_data,
+ col = cluster_cols[kmeans_result$cluster],
+ pch = 19,
+ xlab = "PC1",
+ ylab = "PC2",
+ main = "K-means Clustering on PC1 and PC3")
+
+points(kmeans_result$centers,
+   col = "black",
+   pch = 8,
+   cex = 2,
+   lwd = 2)
+```
+
+```{r}
+pc_data <- pca_result$x[, c(2, 3)]
+
+set.seed(123)
+cluster_cols <- c("orange", "blue", "gold")
+
+kmeans_result <- kmeans(pc_data,
+                        centers = 3,
+                        nstart = 25)
+
+kmeans_result$size
+kmeans_result$centers
+
+plot(pc_data,
+ col = cluster_cols[kmeans_result$cluster],
+ pch = 19,
+ xlab = "PC1",
+ ylab = "PC2",
+ main = "K-means Clustering on PC2 and PC3")
+
+points(kmeans_result$centers,
+   col = "black",
+   pch = 8,
+   cex = 2,
+   lwd = 2)
+```
+
+6. We now try to find out what factors are related to self-esteem? PC1 of all the Esteem scores is a good variable to summarize one's esteem scores. We take PC1 as our response variable. 
+
+    a) Prepare possible factors/variables:
+    
+       Firstly, we have conducted PCA on the ASVAB dataset, extracting PC1 scores and adding them to the dataset as a general level of intelligence.
+
+```{r}
+ASVAB_vars <- c("AFQT", "Coding", "Auto", "Mechanic", "Elec", "Science", "Math", "Arith", "Word", "Parag", "Number")
+ASVAB_data <- temp[ASVAB_vars]
+
+pca_result <- prcomp(ASVAB_data, scale. = TRUE)
+temp$Intelligence <- pca_result$x[, 1]
+```
+    
+    Next, we will create a BMI variable to summarise an individual's body height and weight.
+    
+```{r}
+temp$Height_in <- temp$HeightFeet05 * 12 + temp$HeightInch05
+temp$BMI <- (temp$Weight05 * 0.453592) / ((temp$Height_in * 0.0254)^2)
+```
+
+    Finally, we are going to remove the unwanted variables from the dataset (specifically, Esteem81 scores, AFQT scores except for AFQT). The primary reason for this is that these            variables are already described through other variables such as Intelligence or Esteem, or they are not needed (like Esteem81).
+
+```{r}
+temp <- temp %>%
+    select(-"Esteem81_1", -"Esteem81_2", -"Esteem81_3", -"Esteem81_4", -"Esteem81_5", -"Esteem81_6", -"Esteem81_7", -"Esteem81_8", -"Esteem81_9", -"Esteem81_10", -"Science", 
+           -"Arith",-"Word", -"Parag", -"Number", -"Coding", -"Auto", -"Math", -"Mechanic", -"Elec", -"AFQT", -"HeightFeet05", -"HeightInch05", -"Esteem87_1", -"Esteem87_2",
+           -"Esteem87_3", -"Esteem87_4", -"Esteem87_5", -"Esteem87_6", -"Esteem87_7", -"Esteem87_8", -"Esteem87_9", -"Esteem87_10", -"Height_in", -"Weight05")
+str(temp)
+```
+    
+    Following the data preparation, we will conduct some EDA to gain a sense of the structure of the final dataset as well as the distribution of each variable.
+
+```{r}
+summary(temp)
+```
+          
+    b)   Run a few regression models between PC1 of all the esteem scores in 87 and suitable variables listed in a). Find a final best model with your **own clearly defined criterion**. 
+
+    We will conduct both a forward and backwards stepwise Multiple Linear Regression Model and choose the model which minimises MSE and maximises r-squared. Esteem_PC1 will be our            dependent variable, and the remaining factors our independent variables.
+
+    We first conduct a backward step regression model which starts with all the variables and removes the least significant, until removing more variables does not improve the performance     of the model.
+
+```{r}
+full_model <- lm(Esteem_PC1 ~ . - Subject, data = temp)
+backward_step_model <- step(full_model, direction = "backward", trace = 0)
+summary(backward_step_model)
+formula(backward_step_model)
+```
+    This process came up with the model: -2.20 + 0.0774(Education05) + 0.000013(Income87) + 1.24(Entertainers and Performers, Sports and Related Workers) + 1.03(Protective Service            Occupations) + 0.843(Management Related Occupations) + 0.00000461(Income05) + 0.299(Inewspaper) + 0.124(Intelligence). In this model, we have identified the jobs that best improve        model fit relative to the baseline job, removing the less significant occupations and simplifying the model.
+
+    This has an r-squared of 0.15, meaning 15% of variation in Esteem_PC1 can be explained by variation in the independent variables. Furthermore, we calculate an F-statistic of 11.7 and     a corresponding p-value less than 2x10^-16, indicating that the overall model is significant in explaining variation in the dependent variable. Finally, we calculate a residual           standard error of 2.01, indicating that on average, datapoints are 2.01 standard deviations away from the regression line.
+
+    Next, we will conduct a forward step-wise regression and compare the effectiveness of the model.
+
+```{r}
+null_model <- lm(Esteem_PC1 ~ 1, data = temp)
+forward_step_model <- step(null_model, scope = formula(full_model), direction = "forward", trace = 0)    
+summary(forward_step_model)
+formula(forward_step_model)  
+final_model <- forward_step_model
+```
+
+    This process came up with the exact same model: -2.20 + 0.0774(Education05) + 0.000013(Income87) + 1.24(Entertainers and Performers, Sports and Related Workers) + 1.03(Protective         Service Occupations) + 0.843(Management Related Occupations) + 0.00000461(Income05) + 0.299(Inewspaper) + 0.124(Intelligence). In this model, we have identified the jobs that best        improve model fit relative to the baseline job, removing the less significant occupations and simplifying the model.
+    
+    Similarly, this has an r-squared of 0.15, meaning 15% of variation in Esteem_PC1 can be explained by variation in the independent variables. Furthermore, we calculate an F-statistic      of 11.7 and a corresponding p-value less than 2x10^-16, indicating that the overall model is significant in explaining variation in the dependent variable. Finally, we calculate a        residual standard error of 2.01, indicating that on average, datapoints are 2.01 standard deviations away from the regression line.
+    
+    Finally, we will conduct an exhaustive search, which invovles testing every possible combination of independent variables in a regression model, and selecting the one with the lowest     AIC.
+
+```{r}
+df_exh <- temp[, c("Esteem_PC1",
+               "Education05","Income87","Income05",
+               "Imagazine","Inewspaper","Ilibrary",
+               "MotherEd","FatherEd","FamilyIncome78",
+               "Intelligence","BMI")]
+
+df_exh <- na.omit(df_exh)
+
+exh <- regsubsets(Esteem_PC1 ~ ., 
+              data = df_exh,
+              nvmax = ncol(df_exh) - 1,
+              method = "exhaustive")
+
+summary_exh <- summary(exh)
+
+n <- nrow(df_exh)
+rss <- summary_exh$rss
+k <- 1:length(rss)
+
+aic_vector <- n * log(rss/n) + 2 * (k + 1)
+
+best_size <- which.min(aic_vector)
+best_vars <- names(coef(exh, id = best_size))[-1]
+
+best_formula <- as.formula(
+  paste("Esteem_PC1 ~", paste(best_vars, collapse = " + "))
+)
+
+best_model <- lm(best_formula, data = df_exh)
+summary(best_model)
+```
+
+    This process found the most efficient model was: -2.38 + 0.0946(Education05) + 0.0000137(Income87) + 0.00000481(Income05) + 0.25(Inewspaper) + 0.156(Ilibrary) + 0.0265(MotherEd) +        0.128(Intelligence). 
+    
+    Similarly, this has an r-squared of 0.128, meaning 12.8% of variation in Esteem_PC1 can be explained by variation in the independent variables. Furthermore, we calculate an               F-statistic of 50.9 and a corresponding p-value less than 2x10^-16, indicating that the overall model is significant in explaining variation in the dependent variable. Finally, we        calculate a residual standard error of 2.03, indicating that on average, datapoints are 2.01 standard deviations away from the regression line.
+
+    Hence, looking at these  different models, we select the forward / backward stepwise regression model because it has a higher r-squared statistic, whilst being similar on RSE and         F-statistic significance as the exhaustive model.
+
+```{r}
+qqnorm(residuals(final_model))
+qqline(residuals(final_model), col = "red")
+```
+
+```{r}
+plot(final_model, which = 1)
+```
+    
+    To test the normality assumption, we can look at the QQ-Plot. The points lie very close to the diagonal line, even if there are slight curves at the lower and upper tails, however, we can assume that the normality assumption is met. For linearity, we are looking for an even, random distribution of points above and below zero. There is an even distribution of points     before fitted value -1, however, after this, there is a clear, linear decrease in points converging at zero as the fitted values get more positive. As such, we cannot conclude that       the linearlity assumption holds. Finally, looking at the vertical spread of points in the Residuals vs. Fitted plot, we do not see an even vertical spread of points, because it seems     to be converging at zero as the fitted values get more positive. Consequently, this assumptions does not hold.
+    
+    Thus, the normality assumption holds, but the linearity and homoskedasticity assumptions do not hold.
+
+    Looking at the final model, we can conclude that the variables that most affect one's self-esteem is Education05; Income87; Entertainers and Performers, Sports and Relalted Workers;      Protective Service Occupations; Inewspaper; Intelligence; Income05; and Management Related Occupations. Thus, holding all other independent variables constant, for every increase in      one unit of:
+      - Education05, Self-Esteem will increase by 0.0774 on average.
+      - Income87, Self-Esteem will increase 0.000013 on average.
+      - Income05, Self-Esteem will increase 0.00000461 on average.
+      - Inewspaper, Self-Esteem will increase 0.299 on average.
+      - Intelligence, Self-Esteem will increase 0.124 on average.
+    
+    Similarly, if participants were in these jobs, they experienced an increase in Self-Esteem of:
+      - 1.24 for Entertainers and Performers, Sports and Related Workers
+      - 1.03 for Protective Service Occupations
+      - 0.843 for Management Related Occupations
