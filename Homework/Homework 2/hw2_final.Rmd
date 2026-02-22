@@ -1,9 +1,9 @@
 ---
 title: "Modern Data Mining, HW 2"
 author:
-- Group Member 1
-- Group Member 2
-- Group Member 3
+- Daniel Park
+- Wilson Zhang
+- Elliot Banks
 date: 'Due: 11:59 PM,  Sunday, 02/22'
 output:
   html_document:
