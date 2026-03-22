@@ -1,0 +1,871 @@
+---
+title: "COVID-19 Case Study"
+author:
+- Elliot Banks
+- Daniel Park
+- Wilson Zhang
+date: ''
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    extra_dependencies: ["dcolumn"]
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+urlcolor: blue
+---
+
+---
+
+```{r Setup, include=FALSE, results='hide', warning=FALSE}
+options(tigris_use_cache = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+
+# Package setup
+if(!require("pacman")) install.packages("pacman")
+
+pacman::p_load(tidyverse, dplyr, ggplot2, ggthemes, data.table, lubridate,glmnet,
+               GGally, RColorBrewer, ggsci, plotROC, usmap,
+               plotly, ggpubr, vistime, coefplot, tigris, sf, stringr, softImpute)
+```
+
+# EDA
+
+First read in the data.
+
+```{r}
+county_data <- fread("data/covid_county.csv") 
+covid_rate <- fread("data/covid_rates.csv")
+# covid_intervention <- fread("data/covid_intervention.csv")
+```
+
+## Understand the data
+
+The covid_rates dataset contains daily data on the cumulative number of COVID-19 infections and deaths for each county and state.
+
+The county_data combines Income, Jobs, People and County Classification datasets to contain information about the socioeconomic demographics of individuals in these areas. Variables include population density, unemployment rates, poverty rates and the type of county (urban vs. rural).
+
+## COVID case trend
+
+i) Plot **new** COVID cases in NY, WA and FL by state and by day. Any irregular pattern? What is the biggest problem of using single day data? 
+
+```{r}
+df <- covid_rate %>%
+  filter(State %in% c("New York", "Washington", "Florida")) %>%
+  group_by(State, date) %>%
+  summarise(cum_cases = sum(cum_cases, na.rm = TRUE), .groups = "drop") %>%
+  arrange(State, date) %>%
+  group_by(State) %>%
+  mutate(new_cases = cum_cases - lag(cum_cases))
+
+ggplot(df, aes(x = date, y = new_cases, color = State)) +
+  geom_line() +
+  labs(
+    title = "New COVID Cases by Day",
+    x = "Date",
+    y = "New Cases"
+  ) +
+  theme_minimal()
+
+```
+
+An irregular pattern that we can see is that in the initial wave of COVID-19 in 2020, New York spiked around April before declining, followed by Florida which spiked as soon as New York cases subsided. Following this, in the second wave, both Florida and New York displayed similar patterns of new cases.
+
+The biggest problem with using single-day data is that it creates a significant amount of volatility in the number of cases, as seen in Florida in January 2021 recording over 30,000. This can unnecessarily complicate the graph and potentially distort trends and interpretation. Additionally, it does not give a sense of the number of cases relative to the size of the population (e.g. Washington has significantly lower cases, however, it also has a much smaller population).
+
+ii) Create **weekly new** cases per 100k `weekly_case_per100k`. Plot the spaghetti plots of `weekly_case_per100k` by state. Use `TotalPopEst2019` as population.
+
+```{r}
+# Calculate the total population of each state in 2019
+state_population <- county_data %>%
+  filter(State %in% c("NY", "WA", "FL")) %>%
+  mutate(State = recode(State,
+                        "NY" = "New York",
+                        "WA" = "Washington",
+                        "FL" = "Florida")) %>%
+  distinct(State, County, TotalPopEst2019) %>%
+  group_by(State) %>%
+  summarise(state_pop = sum(TotalPopEst2019, na.rm = TRUE), .groups = "drop")
+
+# Join the total population to the covid_rate data per day.
+df <- covid_rate %>%
+  filter(State %in% c("New York", "Washington", "Florida")) %>%
+  group_by(State, date) %>%
+  summarise(cum_cases = sum(cum_cases, na.rm = TRUE), .groups = "drop") %>%
+  arrange(State, date) %>%
+  group_by(State) %>%
+  mutate(new_cases = cum_cases - lag(cum_cases)) %>%
+  left_join(state_population, by = c("State" = "State"))
+
+# Modify everything to weekly data
+df_weekly <- df %>%
+  mutate(
+    new_cases = ifelse(is.na(new_cases), 0, new_cases),
+    week = floor_date(date, "week")
+  ) %>%
+  group_by(State, week, state_pop) %>%
+  summarise(
+    weekly_cases = sum(new_cases, na.rm = TRUE),
+    .groups = "drop")
+
+# Calculate the rate per 100k people
+df_weekly <- df_weekly %>%
+  mutate(weekly_case_per100k = weekly_cases / state_pop * 100000)
+
+# Plot the results
+ggplot(df_weekly, aes(x = week, y = weekly_case_per100k, group = State, color = State)) +
+  geom_line(alpha = 0.6) +
+  labs(
+    title = "Weekly COVID Cases per 100k",
+    x = "Week",
+    y = "Weekly Cases per 100k"
+  ) +
+  theme_minimal()
+```
+
+iii) Summarize the COVID case trend among states based on the plot in ii). What could be the possible reasons to explain the variabilities? 
+
+New York experienced an initial peak in April 2020, whereas Florida and Washington experienced an initial peak in July 2020. The reason for the difference could be because New York contains a major global airport, and as such, cases from overseas arrived in New York first. Similarly, the high population density in New York compared to Washington and Flordia could have contributed to its initially fast spread.
+
+All states experienced a secondary peak in January 2021, with Florida and New York reaching over 250 weekly cases per 100k people, and washington reaching 150 cases per 100k people. The reason for Washington's lower cases could be because it has a smaller population, and as such, there were fewer human vectors for the virus to be transmitted through.
+
+## COVID death trend
+
+### State-Level Choropleths (2020)
+
+```{r, fig.width=20, fig.height=12}
+# Collate the state outlines
+us_states <- states(cb = TRUE, year = 2020, class = "sf") %>%
+  filter(!STUSPS %in% c("AK", "HI", "PR", "VI", "GU", "MP", "AS"))
+
+# Calculate the total population of each state in 2019
+state_population <- county_data %>%
+  mutate(State = recode(State,
+                        "AL" = "Alabama",
+                        "AK" = "Alaska",
+                        "AZ" = "Arizona",
+                        "AR" = "Arkansas",
+                        "CA" = "California",
+                        "CO" = "Colorado",
+                        "CT" = "Connecticut",
+                        "DE" = "Delaware",
+                        "DC" = "District of Columbia",
+                        "FL" = "Florida",
+                        "GA" = "Georgia",
+                        "HI" = "Hawaii",
+                        "ID" = "Idaho",
+                        "IL" = "Illinois",
+                        "IN" = "Indiana",
+                        "IA" = "Iowa",
+                        "KS" = "Kansas",
+                        "KY" = "Kentucky",
+                        "LA" = "Louisiana",
+                        "ME" = "Maine",
+                        "MD" = "Maryland",
+                        "MA" = "Massachusetts",
+                        "MI" = "Michigan",
+                        "MN" = "Minnesota",
+                        "MS" = "Mississippi",
+                        "MO" = "Missouri",
+                        "MT" = "Montana",
+                        "NE" = "Nebraska",
+                        "NV" = "Nevada",
+                        "NH" = "New Hampshire",
+                        "NJ" = "New Jersey",
+                        "NM" = "New Mexico",
+                        "NY" = "New York",
+                        "NC" = "North Carolina",
+                        "ND" = "North Dakota",
+                        "OH" = "Ohio",
+                        "OK" = "Oklahoma",
+                        "OR" = "Oregon",
+                        "PA" = "Pennsylvania",
+                        "RI" = "Rhode Island",
+                        "SC" = "South Carolina",
+                        "SD" = "South Dakota",
+                        "TN" = "Tennessee",
+                        "TX" = "Texas",
+                        "UT" = "Utah",
+                        "VT" = "Vermont",
+                        "VA" = "Virginia",
+                        "WA" = "Washington",
+                        "WV" = "West Virginia",
+                        "WI" = "Wisconsin",
+                        "WY" = "Wyoming")) %>%
+  distinct(State, County, TotalPopEst2019) %>%
+  group_by(State) %>%
+  summarise(state_pop = sum(TotalPopEst2019, na.rm = TRUE), .groups = "drop")
+
+# Join the total population to the covid_rate data per day
+df <- covid_rate %>%
+  group_by(State, date) %>%
+  summarise(cum_deaths = sum(cum_deaths, na.rm = TRUE), .groups = "drop") %>%
+  arrange(State, date) %>%
+  group_by(State) %>%
+  mutate(new_deaths = cum_deaths - lag(cum_deaths, default = 0)) %>%
+  left_join(state_population, by = c("State" = "State"))
+
+# Modify everything to month data
+df_monthly <- df %>%
+  mutate(
+    month = floor_date(date, "month")
+  ) %>%
+  group_by(State, month, state_pop) %>%
+  summarise(
+    monthly_deaths = sum(new_deaths, na.rm = TRUE),
+    .groups = "drop")
+
+# Calculate the rate per 100k people
+df_monthly <- df_monthly %>%
+  mutate(monthly_deaths_per100k = monthly_deaths / state_pop * 100000)
+
+# Join state data with other data
+df_monthly <- us_states %>%
+  left_join(df_monthly, by = c("NAME" = "State"))
+
+# Visualise the results
+max_val <- max(df_monthly$monthly_deaths_per100k, na.rm = TRUE)
+
+df_monthly <- df_monthly %>%
+  mutate(month_label = lubridate::month(month, label = TRUE, abbr = TRUE))
+
+ggplot(df_monthly) +
+  geom_sf(aes(fill = monthly_deaths_per100k), color = "white", linewidth = 0.2) +
+  facet_wrap(~month_label, ncol = 3) +
+  coord_sf(datum = NA) +
+  scale_fill_gradient(
+    low = "lightyellow",
+    high = "darkred",
+    limits = c(0, max_val),
+    na.value = "grey90",
+    name = "Deaths per 100k"
+  ) +
+  labs(
+    title = "Monthly COVID-19 Deaths per 100k by State in 2020"
+  ) +
+  theme_minimal(base_size = 25) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+### County-Level Choropleth
+
+```{r, fig.width=20, fig.height=16, echo=FALSE, warning=FALSE, message=FALSE}
+# Collate the county outlines
+us_counties <- suppressWarnings(
+  suppressMessages(
+    counties(cb = TRUE, year = 2020, class = "sf")
+  )
+) %>%
+  filter(!STATEFP %in% c("02", "15", "60", "66", "69", "72", "78"))
+
+# State lookup for names
+state_lookup <- suppressWarnings(
+  suppressMessages(
+    states(cb = TRUE, year = 2020, class = "sf")
+  )
+) %>%
+  st_drop_geometry() %>%
+  select(STATEFP, state_name = NAME, STUSPS)
+
+# Add state name to county shapes
+us_counties <- us_counties %>%
+  left_join(state_lookup, by = "STATEFP")
+
+# County population in 2019
+county_population <- county_data %>%
+  mutate(
+    State = recode(State,
+      "AL" = "Alabama",
+      "AK" = "Alaska",
+      "AZ" = "Arizona",
+      "AR" = "Arkansas",
+      "CA" = "California",
+      "CO" = "Colorado",
+      "CT" = "Connecticut",
+      "DE" = "Delaware",
+      "DC" = "District of Columbia",
+      "FL" = "Florida",
+      "GA" = "Georgia",
+      "HI" = "Hawaii",
+      "ID" = "Idaho",
+      "IL" = "Illinois",
+      "IN" = "Indiana",
+      "IA" = "Iowa",
+      "KS" = "Kansas",
+      "KY" = "Kentucky",
+      "LA" = "Louisiana",
+      "ME" = "Maine",
+      "MD" = "Maryland",
+      "MA" = "Massachusetts",
+      "MI" = "Michigan",
+      "MN" = "Minnesota",
+      "MS" = "Mississippi",
+      "MO" = "Missouri",
+      "MT" = "Montana",
+      "NE" = "Nebraska",
+      "NV" = "Nevada",
+      "NH" = "New Hampshire",
+      "NJ" = "New Jersey",
+      "NM" = "New Mexico",
+      "NY" = "New York",
+      "NC" = "North Carolina",
+      "ND" = "North Dakota",
+      "OH" = "Ohio",
+      "OK" = "Oklahoma",
+      "OR" = "Oregon",
+      "PA" = "Pennsylvania",
+      "RI" = "Rhode Island",
+      "SC" = "South Carolina",
+      "SD" = "South Dakota",
+      "TN" = "Tennessee",
+      "TX" = "Texas",
+      "UT" = "Utah",
+      "VT" = "Vermont",
+      "VA" = "Virginia",
+      "WA" = "Washington",
+      "WV" = "West Virginia",
+      "WI" = "Wisconsin",
+      "WY" = "Wyoming"
+    ),
+    County = str_remove(County, " County$| Parish$| Borough$| Census Area$| Municipality$")
+  ) %>%
+  distinct(State, County, TotalPopEst2019) %>%
+  rename(county_pop = TotalPopEst2019)
+
+# Calculate county daily deaths
+df <- covid_rate %>%
+  mutate(
+    State = recode(State,
+      "AL" = "Alabama",
+      "AK" = "Alaska",
+      "AZ" = "Arizona",
+      "AR" = "Arkansas",
+      "CA" = "California",
+      "CO" = "Colorado",
+      "CT" = "Connecticut",
+      "DE" = "Delaware",
+      "DC" = "District of Columbia",
+      "FL" = "Florida",
+      "GA" = "Georgia",
+      "HI" = "Hawaii",
+      "ID" = "Idaho",
+      "IL" = "Illinois",
+      "IN" = "Indiana",
+      "IA" = "Iowa",
+      "KS" = "Kansas",
+      "KY" = "Kentucky",
+      "LA" = "Louisiana",
+      "ME" = "Maine",
+      "MD" = "Maryland",
+      "MA" = "Massachusetts",
+      "MI" = "Michigan",
+      "MN" = "Minnesota",
+      "MS" = "Mississippi",
+      "MO" = "Missouri",
+      "MT" = "Montana",
+      "NE" = "Nebraska",
+      "NV" = "Nevada",
+      "NH" = "New Hampshire",
+      "NJ" = "New Jersey",
+      "NM" = "New Mexico",
+      "NY" = "New York",
+      "NC" = "North Carolina",
+      "ND" = "North Dakota",
+      "OH" = "Ohio",
+      "OK" = "Oklahoma",
+      "OR" = "Oregon",
+      "PA" = "Pennsylvania",
+      "RI" = "Rhode Island",
+      "SC" = "South Carolina",
+      "SD" = "South Dakota",
+      "TN" = "Tennessee",
+      "TX" = "Texas",
+      "UT" = "Utah",
+      "VT" = "Vermont",
+      "VA" = "Virginia",
+      "WA" = "Washington",
+      "WV" = "West Virginia",
+      "WI" = "Wisconsin",
+      "WY" = "Wyoming"
+    ),
+    County = str_remove(County, " County$| Parish$| Borough$| Census Area$| Municipality$")
+  ) %>%
+  group_by(State, County, date) %>%
+  summarise(cum_deaths = sum(cum_deaths, na.rm = TRUE), .groups = "drop") %>%
+  arrange(State, County, date) %>%
+  group_by(State, County) %>%
+  mutate(new_deaths = cum_deaths - lag(cum_deaths, default = 0)) %>%
+  ungroup() %>%
+  left_join(county_population, by = c("State", "County"))
+
+# Monthly county data
+df_monthly <- df %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(State, County, month, county_pop) %>%
+  summarise(
+    monthly_deaths = sum(new_deaths, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(monthly_deaths_per100k = monthly_deaths / county_pop * 100000)
+
+# Join county data to geographic outlines
+df_monthly <- us_counties %>%
+  left_join(df_monthly, by = c("state_name" = "State", "NAME" = "County"))
+
+# Visualise the results
+max_val <- max(df_monthly$monthly_deaths_per100k, na.rm = TRUE)
+
+df_monthly <- df_monthly %>%
+  mutate(month_label = lubridate::month(month, label = TRUE, abbr = TRUE))
+
+ggplot(df_monthly) +
+  geom_sf(aes(fill = monthly_deaths_per100k), color = NA) +
+  facet_wrap(~month_label, ncol = 3) +
+  coord_sf(datum = NA) +
+  scale_fill_gradient(
+    low = "lightyellow",
+    high = "darkred",
+    limits = c(0, max_val),
+    na.value = "grey90",
+    name = "Deaths per 100k"
+  ) +
+  labs(
+    title = "Monthly COVID-19 Deaths per 100k by County in 2020"
+  ) +
+  theme_minimal(base_size = 25) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank()
+  )
+```
+
+### Brief Interpretation (Conceptual)
+
+From these two graphics, we can see that the clusters of COVID-19 cases are roughly equally spread around the US in a relatively random manner. There is strong evidence of regional clustering, whereby states adjacent with a state with a high death rate, also experience similarly high death rates. However, this trend is often distorted by numerous clusters being across the US at any one time. Finally, looking at the state map, the number of deaths and spread of COVID-19 seems far worse than it actually is. If we look at the county map, it shows that the clusters are far more isolated within each state, with the vast majority of county's not having any deaths from COVID-19 every month.
+
+# COVID factor
+
+We now try to build a good parsimonious model to find possible factors related to death rate on county level. Let us not take time series into account for the moment and use the total number as of *March 1, 2021*.
+
+i) Create the response variable `total_death_per100k` as the total of number of COVID deaths per 100k by *March 1, 2021*. We suggest to take log transformation as `log_total_death_per100k = log(total_death_per100k + 1)`. Merge `total_death_per100k` to `county_data` for the following analysis.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+covid_death_summary <- covid_rate %>%
+  filter(as.Date(date) <= as.Date("2021-03-01")) %>%
+  group_by(FIPS) %>%
+  slice_max(order_by = as.Date(date), n = 1, with_ties = FALSE) %>%
+  mutate(
+    total_death_per100k = (cum_deaths / TotalPopEst2019) * 100000,
+    log_total_death_per100k = log(total_death_per100k + 1)
+  ) %>%
+  select(FIPS, total_death_per100k, log_total_death_per100k) %>%
+  ungroup()
+  
+covid_death_summary <- covid_death_summary %>%
+  mutate(
+    log_total_death_per100k = log(total_death_per100k + 1)
+  ) %>%
+  left_join(county_data, by = "FIPS")
+```
+
+ii) Select possible variables in `county_data` as covariates. We provide `county_data_sub`, a subset variables from `county_data`, for you to get started. Please add any potential variables as you wish. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+county_data_sub <- county_data %>%
+  select(
+    FIPS,
+    PopDensity2010,
+    MedHHInc,
+    PovertyAllAgesPct,
+    Age65AndOlderPct2010,
+    BlackNonHispanicPct2010,
+    HispanicPct2010,
+    UnempRate2019,
+    Ed5CollegePlusPct,
+    NetMigrationRate1019
+  )
+```
+
+    a) Report missing values in your final subset of variables. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+colSums(is.na(county_data_sub))
+sum(is.na(county_data_sub))
+```
+From the subset, MedHHInc has 86 missing values, PovertyAllAgesPct has 86 missing values, Age65AndOlderPct2010 has 6 missing values, BlackNonHispanicPct2010 has 6 missing values, HispanicPct2010 has 6 missing values, UnempRate2019 has 7 missing values, Ed5CollegePlusPct has 6 missing values and NetMigrationRate1019 has 85 missing values. The total number of missing values is 294.
+
+    b) In the following anaylsis, you may ignore the missing values.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+county_data_sub <- county_data %>%
+  select(County, State, FIPS, Deep_Pov_All, PovertyAllAgesPct, PerCapitaInc, UnempRate2019, PctEmpFIRE, PctEmpConstruction, PctEmpTrans, PctEmpMining, PctEmpTrade, PctEmpInformation, PctEmpAgriculture, PctEmpManufacturing, PctEmpServices, PopDensity2010, OwnHomePct, Age65AndOlderPct2010, TotalPop25Plus, Under18Pct2010, Ed2HSDiplomaOnlyPct, Ed3SomeCollegePct, Ed4AssocDegreePct, Ed5CollegePlusPct, ForeignBornPct, Net_International_Migration_Rate_2010_2019, NetMigrationRate1019, NaturalChangeRate1019, TotalPopEst2019, WhiteNonHispanicPct2010, NativeAmericanNonHispanicPct2010, BlackNonHispanicPct2010, AsianNonHispanicPct2010, HispanicPct2010, Type_2015_Update, RuralUrbanContinuumCode2013, UrbanInfluenceCode2013, Perpov_1980_0711, HiCreativeClass2000, HiAmenity, Retirement_Destination_2015_Update)
+```
+
+iii) Use LASSO to choose a parsimonious model with all available sensible county-level information. **Force in State** in the process. Why do we need to force in State? You may use `lambda.1se` to choose a smaller model. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data <- county_data_sub %>%
+  inner_join(
+    covid_death_summary %>%
+      select(FIPS, log_total_death_per100k),
+    by = "FIPS"
+  ) %>%
+  select(-County, -FIPS) %>%
+  na.omit()
+
+y <- data$log_total_death_per100k
+X <- model.matrix(
+  log_total_death_per100k ~ .,
+  data = data
+)[, -1]
+
+penalty_factors <- ifelse(grepl("^State", colnames(X)), 0, 1)
+set.seed(123)
+
+cv_lasso <- cv.glmnet(
+  x = X,
+  y = y,
+  alpha = 1,
+  family = "gaussian",
+  standardize = TRUE,
+  penalty.factor = penalty_factors,
+  nfolds = 10
+)
+
+coef_1se <- coef(cv_lasso, s = "lambda.1se")
+
+selected_terms <- data.frame(
+  term = rownames(coef_1se),
+  estimate = as.numeric(coef_1se)
+) %>%
+  filter(estimate != 0)
+
+selected_terms
+
+plot(cv_lasso)
+```
+
+The reason why we need to force State into the model is to account for different reporting, policy and healthcare systems. If State were penalised, then these differences could be attributed incorrectly to county-level variation.
+
+iv) Use a quick backward elimination to fine tune the LASSO model from iii). Again **force in State** in the process. 
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+vars <- selected_terms$term
+vars <- vars[vars != "(Intercept)"]
+
+lasso_df <- as.data.frame(X[, vars, drop = FALSE])
+lasso_df$log_total_death_per100k <- y
+
+lm_fit <- lm(log_total_death_per100k ~ ., data = lasso_df)
+
+step_model <- step(
+  lm_fit,
+  direction = "backward")
+
+state_vars <- vars[grepl("^State", vars)]
+
+final_vars <- union(names(coef(step_model))[-1], state_vars)
+
+final_df <- lasso_df[, c("log_total_death_per100k", final_vars), drop = FALSE]
+
+final_model <- lm(log_total_death_per100k ~ ., data = final_df)
+
+step_model <- step(
+  lm_fit,
+  direction = "backward",
+  k = log(nrow(lasso_df))
+)
+```
+
+v) If necessary, reduce the model from iv) to a final model with all variables being significant at 0.05 level. Are the linear model assumptions all reasonably met?
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# The backward elimination final model (step_model) contains all vars surviving BIC.
+# Now drop any non-State vars with p >= 0.05, keeping all State dummies forced in.
+
+summary_step <- summary(step_model)
+coef_df <- as.data.frame(summary_step$coefficients)
+coef_df$term <- rownames(coef_df)
+
+# Identify non-State terms that are NOT significant at 0.05
+non_state_insig <- coef_df %>%
+  filter(!grepl("^State|Intercept", term)) %>%
+  filter(`Pr(>|t|)` >= 0.05) %>%
+  pull(term)
+
+# Drop those terms and refit
+final_vars_v <- setdiff(names(coef(step_model))[-1], non_state_insig)
+final_df_v <- final_df[, c("log_total_death_per100k", final_vars_v), drop = FALSE]
+final_model_v <- lm(log_total_death_per100k ~ ., data = final_df_v)
+
+summary(final_model_v)
+```
+
+The final model performs well overall. The F-statistic of 45.9 on 39 and 3065 degrees of freedom is highly significant (p < 2e-16), confirming that the model explains significantly more variance in county-level COVID death rates than an intercept-only baseline. 
+
+However, the adjusted R-squared of 0.361 indicates that approximately only 36% of the variation in log death rates across counties is explained by the retained state and county-level predictors.
+
+Every retained variable is statistically significant at the 5% level, and the majority are significant at the 0.1% level (p < 0.001).
+
+```{r, echo=TRUE, fig.width=10, fig.height=4}
+# Linear model assumption diagnostics
+par(mfrow = c(1, 2))
+plot(final_model_v, which = c(1, 2))
+par(mfrow = c(1, 1))
+```
+
+The final model retains all State fixed effects plus the county-level covariates significant at the 5% level. Examining the two diagnostic plots:
+
+**Residuals vs Fitted**: The residuals are broadly centred around zero and the red smoothing line is relatively flat, suggesting the linearity assumption is reasonably satisfied. However, there is a clear fan of large negative residuals at lower fitted values, indicating heteroscedasticity — the variance of residuals is not constant across the range of fitted values. This is likely driven by counties with near-zero death counts, where the log(x + 1) transformation does not fully stabilise variance.
+
+**Q-Q Residuals**: There is substantial deviation from the theoretical normal line, particularly in the left tail, where several counties (observations 1593, 2302, 2922) fall far below the line. This indicates left-skewed residuals driven by counties with very low or zero deaths, likely sparse rural counties where the log-transformed death rate clusters near zero. The right tail also deviates mildly upward. The normality assumption is not well met.
+
+vi) It has been shown that COVID affects elderly the most. It is also claimed that the COVID death rate among African Americans and Latinos is higher. Does your analysis support these arguments?
+
+
+```{r, echo=TRUE}
+# Defining coef_summary from final model
+coef_summary <- as.data.frame(summary(final_model_v)$coefficients)
+coef_summary$term <- rownames(coef_summary)
+
+# County-level coefficient plot
+county_vars <- c("PerCapitaInc", "PctEmpConstruction", "PctEmpAgriculture")
+
+# Fitting an augmented model with BlackNonHispanicPct2010 added back for reference
+final_df_black <- final_df_v
+final_df_black$BlackNonHispanicPct2010 <- X[rownames(final_df_v), 
+                                             "BlackNonHispanicPct2010"]
+augmented_model <- lm(log_total_death_per100k ~ ., data = final_df_black)
+
+coef_summary_final <- as.data.frame(summary(final_model_v)$coefficients)
+coef_summary_final$term <- rownames(coef_summary_final)
+
+coef_summary_aug <- as.data.frame(summary(augmented_model)$coefficients)
+coef_summary_aug$term <- rownames(coef_summary_aug)
+
+bind_rows(
+  coef_summary_final %>%
+    filter(term %in% c("Age65AndOlderPct2010", "HispanicPct2010")),
+  coef_summary_aug %>%
+    filter(term == "BlackNonHispanicPct2010")
+) %>%
+  select(term, Estimate, `Std. Error`, `t value`, `Pr(>|t|)`)
+```
+
+The table above presents the coefficients for the three demographic groups of interest. Note that `BlackNonHispanicPct2010` was removed during variable selection and is not part of the final model; it is included here for reference only, estimated by adding it back into the final model alongside all retained variables.
+
+**Elderly:** The analysis strongly supports this claim. The coefficient for `Age65AndOlderPct2010` is positive and highly significant (β = 0.0378, p < 0.001), meaning that for each additional percentage point of residents aged 65 and over, the log COVID-19 death rate increases by 0.0378, holding all other factors constant.
+
+**Latinos:** The analysis supports this claim at the county level. The coefficient for `HispanicPct2010` is positive and highly significant (β = 0.00729, p < 0.001), indicating that counties with larger Hispanic populations experienced higher COVID-19 death rates after controlling for socioeconomic factors and state fixed effects. This likely reflects higher rates of essential worker employment in sectors such as agriculture and construction, both of which also appear significantly in the model. Additionally, there is greater household density and more limited access to healthcare.
+
+**African Americans:** The analysis does not support this claim at the county level. When `BlackNonHispanicPct2010` is added back into the final model its coefficient is small, negative, and not statistically significant (β = -0.00159, p = 0.527). This means that after controlling for socioeconomic factors such as per-capita income, education, employment sector, and state fixed effects, the proportion of Black residents in a county has no significant independent association with COVID-19 death rates. 
+
+vii) Based on your final model, summarize your findings. In particular, summarize the state effect controlling for others. Provide intervention recommendations to policy makers to reduce COVID death rate.
+
+```{r, echo=TRUE, fig.width=10, fig.height=5}
+county_vars <- c("PerCapitaInc", "PctEmpConstruction", "PctEmpAgriculture",
+                 "PctEmpManufacturing", "Age65AndOlderPct2010", "Under18Pct2010",
+                 "Ed3SomeCollegePct", "NetMigrationRate1019",
+                 "NaturalChangeRate1019", "WhiteNonHispanicPct2010",
+                 "HispanicPct2010", "Type_2015_Update")
+
+coef_summary %>%
+  filter(term %in% county_vars) %>%
+  ggplot(aes(x = reorder(term, Estimate), y = Estimate,
+             ymin = Estimate - 1.96 * `Std. Error`,
+             ymax = Estimate + 1.96 * `Std. Error`)) +
+  geom_pointrange() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(title = "County-Level Predictor Effects on log COVID Death Rate",
+       x = "", y = "Coefficient Estimate (95% CI)") +
+  theme_minimal()
+```
+The coefficient plot above shows the estimated effect of each county-level predictor on the log COVID-19 death rate, with 95% confidence intervals, after controlling for state fixed effects. All confidence intervals exclude zero, confirming that every variable is statistically significant at the 5% level.
+
+The two strongest positive predictors are Under18Pct2010 and Age65AndOlderPct2010, both with confidence intervals well to the right of
+zero. Importantly, Under18Pct2010 has the largest effect of any variable in the model, which may seem counterintuitive since children are not themselves at high risk from COVID-19. However, this likely proxies for younger, denser, and more multigenerational households, where children act as transmission vectors to vulnerable elderly members living in the same home. Age65AndOlderPct2010 directly reflects the well-documented clinical vulnerability of older individuals to severe COVID-19 outcomes. HispanicPct2010 and PctEmpManufacturing show smaller but clearly positive effects, consistent with occupational exposure risk and limited ability to work remotely in these groups. PerCapitaInc sits almost exactly on zero with a very tight confidence interval, reflecting a small but precisely estimated protective effect of income.
+
+On the negative side, NaturalChangeRate1019 shows the largest protective effect with the widest confidence interval, meaning counties with higher natural population growth — tending to be younger and more economically dynamic — had substantially lower death rates, though this relationship is also the most uncertain. PctEmpAgriculture and PctEmpConstruction both show moderate negative effects. After controlling for income, rurality, and all other factors, these employment types appear to be markers of lower-density counties where community transmission was more limited, outweighing the occupational exposure risk of individual workers. Ed3SomeCollegePct and NetMigrationRate1019 show moderate negative effects, reflecting the protective role of health literacy and economic vitality respectively.
+
+WhiteNonHispanicPct2010 shows a small negative effect, reflecting the inverse of the racial and ethnic disparities discussed in part vi.
+Type_2015_Update has a notably wide confidence interval spanning much of the negative range, suggesting that while more rural counties had lower death rates on average, there is considerable variability in this relationship across counties.
+
+
+```{r, echo=TRUE, fig.width=12, fig.height=6}
+# Refit model with New York as reference state
+data_ny <- data
+data_ny$State <- relevel(factor(data_ny$State), ref = "NY")
+
+final_model_ny <- lm(log_total_death_per100k ~ State + PerCapitaInc + 
+                       PctEmpConstruction + PctEmpAgriculture +
+                       PctEmpManufacturing + Age65AndOlderPct2010 + 
+                       Under18Pct2010 + Ed3SomeCollegePct + 
+                       NetMigrationRate1019 + NaturalChangeRate1019 + 
+                       WhiteNonHispanicPct2010 + HispanicPct2010 + 
+                       Type_2015_Update,
+                     data = data_ny)
+
+coef_summary_ny <- as.data.frame(summary(final_model_ny)$coefficients)
+coef_summary_ny$term <- rownames(coef_summary_ny)
+
+state_coefs_ny <- coef_summary_ny %>%
+  filter(grepl("^State", term)) %>%
+  mutate(state = gsub("^State", "", term)) %>%
+  bind_rows(tibble(term = "StateNY", state = "NY", Estimate = 0,
+                   `Std. Error` = 0, `t value` = 0, `Pr(>|t|)` = 0))
+
+plot_usmap(data = state_coefs_ny, values = "Estimate", regions = "states") +
+  scale_fill_gradient2(low = "#4575B4", mid = "white", high = "#D73027",
+                       midpoint = 0, name = "Coefficient\n(vs New York)") +
+  labs(title = "State Fixed Effects on log COVID Death Rate (Relative to New York)") +
+  theme(legend.position = "right")
+```
+
+The map above shows state fixed effects relative to New York, after controlling for all county-level socioeconomic factors. Grey states were dropped during variable selection, meaning their death rates were not significantly different from New York once county characteristics are accounted for. New York itself appears white as the reference state with a coefficient of zero.
+
+The most striking pattern is a clear geographic divide. The northern plains states — North Dakota and South Dakota — show the deepest red, meaning their counties had substantially higher death rates than comparable New York counties after controlling for socioeconomic factors. Montana also shows a moderately positive effect. This is notable because these are relatively rural, low-density
+states where one might expect lower transmission, but their limited public
+health responses and continued large gatherings during 2020 appear to have
+driven excess mortality beyond what their demographics would predict.
+
+Much of the South and Southwest — including Texas, Oklahoma, Arizona, and the southeastern states — also shows positive effects, indicating higher death rates than New York after controlling for county characteristics. This points to the role of state-level policy differences, with many of these states implementing fewer or shorter restrictions during 2020.
+
+In contrast, the Northeast corridor stands out clearly in blue. Vermont and Maine show the strongest negative effects, meaning their counties had dramatically lower death rates than comparable New York counties. This is consistent with these states having some of the most cautious public health responses, high levels of public compliance, and strong healthcare infrastructure relative to their population size. Washington, Oregon, and California on the West Coast also show moderate negative effects, reflecting similarly proactive state-level responses.
+
+Overall the map reveals that state-level policy and institutional factors played a significant independent role in shaping COVID-19 mortality, above and beyond the socioeconomic characteristics of individual counties. States that acted early and maintained consistent public health measures achieved meaningfully lower death rates than their demographics alone would predict.
+
+viii) What else can we do to improve our model? What other important information we may have missed? 
+
+**Model improvements:**
+
+- **Spatial correlation**: If a county has a high death rate, its neighbouring counties are likely to as well, simply due to geographic 
+  proximity. Our model does not account for this.
+
+- **Time series modelling**: We only used cumulative deaths up to March 1, 2021. Using daily or weekly data would allow us to see how factors 
+  affected death rates differently across each wave of the pandemic.
+
+- **Interaction terms**: We assume all predictors act independently, but in reality their effects may combine. For example, being elderly in a poor county may be more deadly than the sum of the two effects individually.
+
+- **Non-linear relationships**: We assume a linear relationship between each predictor and death rate. Some variables like age or income may have threshold effects that a linear model cannot capture.
+
+- **Outlier treatment**: The diagnostic plots showed several counties with very large negative residuals, driven by near-zero death counts. Removing or separately modelling these zero-death counties could improve model fit.
+
+**Missing variables:**
+
+- **Healthcare capacity**: ICU beds per capita and hospital density are strong predictors of COVID mortality not captured in the current data.
+
+- **Vaccination rates**: Rollout had begun by March 2021 and varied significantly by county, representing a major omitted variable.
+
+- **Government interventions**: Mask mandates, lockdowns, and school closures vary at the state and county level and are well-documented predictors of mortality.
+
+- **More measueres of health**: County-level rates of obesity, diabetes, and cardiovascular disease would strongly predict COVID-19 severity but are absent from the dataset.
+
+- **Nursing home density**: A disproportionate share of early COVID deaths occurred in long-term care facilities, which is not captured by elderly population share alone.
+
+- **Testing rates**: Counties with limited testing access likely under-report deaths, introducing measurement error into the response variable.
+
+ix) (Optional) Would your findings be very different if you had refined the data in some way or imputed the missing values in part ii). Check PCA lecture, section 10 for imputations via `softImpute`. 
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+library(softImpute)
+
+# Prepare matrix
+county_matrix <- county_data_sub %>%
+  select(-County, -State, -FIPS) %>%
+  as.matrix()
+
+# Fit softImpute
+fit <- softImpute(county_matrix, rank.max = 5, type = "als")
+
+# Reconstruct completed matrix (same as lecture)
+county_completed <- fit$u %*% diag(fit$d) %*% t(fit$v)
+
+# Replace NAs only
+county_matrix[is.na(county_matrix)] <- county_completed[is.na(county_matrix)]
+
+# Put back into dataframe
+county_data_imputed <- county_data_sub %>%
+  select(County, State, FIPS) %>%
+  bind_cols(as.data.frame(county_matrix))
+
+# Merge and refit
+data_imputed <- county_data_imputed %>%
+  inner_join(covid_death_summary %>% 
+               select(FIPS, log_total_death_per100k), by = "FIPS") %>%
+  select(-County, -FIPS)
+
+county_vars <- names(coef(final_model_v))[!grepl("^State|Intercept",
+                                                   names(coef(final_model_v)))]
+
+final_model_imputed <- lm(log_total_death_per100k ~ .,
+                          data = data_imputed %>%
+                            select(log_total_death_per100k, State,
+                                   all_of(county_vars)))
+
+summary(final_model_imputed)
+```
+
+The imputed model produces very similar results to the original complete-case analysis. The adjusted R-squared is identical at 0.360, and all county-level variables that were significant in the original model remain significant here, with coefficients of almost the same magnitude. For example, Under18Pct2010 (0.0609 vs 0.0616), Age65AndOlderPct2010 (0.0357 vs 0.0378), and PctEmpAgriculture (-0.0350 vs -0.0350) are essentially unchanged.
+
+The main difference is in the state fixed effects. The imputed model includes more states than the original, since counties 
+that previously had to be dropped due to missing data are now included,  adding observations back for states that were underrepresented before. However, most of these additional states are not statistically significant, suggesting they do not behave very differently from the baseline once county characteristics are accounted for.
+
+Overall, the findings are not materially different under imputation. The key county-level predictors, their directions, and their relative importance all remain stable. This suggests that the 294 counties dropped in the complete-case analysis were missing at random with respect to the outcome, and that our original conclusions hold regardless of how missing values are handled.
+
+
+# Executive Summary
+
+**Goal**
+
+This study aimed to characterise the temporal and geographic spread of COVID-19 across the United States and to identify county-level socioeconomic and demographic factors associated with variation in COVID-19 death rates up to March 1, 2021, with the goal of informing public health policy.
+
+**Data**
+
+Two datasets were used. The covid_rates dataset provided daily cumulative COVID-19 case and death counts at the county level across all US states. The county_data dataset integrates four administrative sources (Income, Jobs, People, and County Classification), providing socioeconomic and demographic characteristics for each US county, including population density, poverty rates, employment by sector, racial composition, educational attainment, and urban/rural classification. The two datasets were merged using FIPS county codes, with population estimates from 2019 used to normalise counts to rates per 100,000 residents.
+
+**Analyses**
+
+Exploratory analysis included time-series plots of weekly COVID-19 cases per 100k for New York, Washington, and Florida, and state- and county-level choropleth maps of monthly COVID-19 deaths per 100k across 2020. A log-transformed cumulative death rate per 100k served as the response variable. 
+
+LASSO regression with state fixed effects forced in was used for variable selection, followed by backward stepwise elimination using AIC, and
+a final reduction to variables significant at the 5% level. Model assumptions were assessed via a Residuals vs Fitted plot to check linearity and homoscedasticity, and a Normal Q-Q plot to assess normality of residuals. 
+
+Missing values were handled via complete-case analysis, with sensitivity analysis using softImpute matrix completion confirming results were robust.
+
+**Findings**
+
+The time-series plots showed that New York experienced its first COVID-19 wave earlier than Florida and Washington, likely due to its role as an international travel hub, while all three states saw a large secondary wave in January 2021. The final model identified the proportion of residents aged 65 and over and the proportion of children under 18 as the strongest predictors of higher county-level death rates, the latter likely correlated to multigenerational households, as well as the increased susceptibility of older residents to COVID-19. 
+
+Higher Hispanic population share and manufacturing employment were also associated with elevated death rates, while higher per-capita income,
+educational attainment, and natural population growth were protective.
+
+The final model had an adjusted R-squared of 0.361, indicating it explained approximately 36% of county-level variation in death rates. The residual diagnostics revealed mild violations of normality and homoscedasticity, largely driven by counties with near-zero death counts, though the large sample size of over 3,000 counties ensures inference remains approximately valid.
+
+State fixed effects revealed that Vermont, Maine, Washington, Oregon, and California achieved substantially lower death rates than their county demographics would predict, pointing to the protective role of state-level public health policy. North and South Dakota showed the opposite pattern.
+
+**Limitations**
+
+Although daily COVID-19 data was available, this analysis collapsed it into a single cumulative snapshot at March 1, 2021, meaning it cannot capture how risk factors may have influenced death rates differently across each wave of the pandemic. Neighbouring counties likely influenced each other's death rates in ways the model does not account for. 
+
+Several important factors were missing from the data, including hospital capacity, vaccination rates, rates of underlying
+health conditions, and government policy responses such as mask mandates and lockdowns, all of which likely played a significant role in shaping outcomes.
+
+Finally, counties with limited access to testing may have had deaths go unrecorded, meaning the death rates in some areas could be underestimated.
+
